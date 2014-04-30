@@ -1,0 +1,69 @@
+body {
+	color: #494949;
+	background: url(../images/stone.jpg) center 50px #f9f9f9;
+	margin: 0px;
+	overflow: scroll;
+}
+
+.page {
+	background: url(../images/stone.jpg) center 0px;
+	background-color: #f9f9f9;
+}
+
+.ui-page-active {
+	background: url(../images/stone.jpg) center 0px;
+	background-color: #f9f9f9;
+}
+
+label.left-block {
+	width:20%;
+	float:left;
+	word-wrap: break-word;
+}
+
+div.left-block {
+	width:30%;
+	float:left;
+	font-weight:normal;
+	word-wrap: break-word;
+}
+
+div.right-block {
+	width:70%;
+	float:right;
+}
+
+div.clear {
+	clear:both;
+}
+
+.hide {
+	display:none;
+}
+
+div.ui-rangeslider input {
+   width: 120px !important;
+}
+
+div.ui-rangeslider .ui-rangeslider-sliders {
+	/* Firefox */
+	width: -moz-calc(80% - 190px) !important;
+	/* WebKit */
+	width: -webkit-calc(80% - 190px) !important;
+	/* Opera */
+	width: -o-calc(80% - 190px) !important;
+	/* Standard */
+	width: calc(80% - 190px) !important;
+}
+
+th.header {
+	background-repeat: no-repeat;
+	background-position: center right;
+	cursor: pointer;
+}
+th.headerSortUp {
+	background-image: url(../images/asc.png);
+}
+th.headerSortDown {
+	background-image: url(../images/desc.png);
+}

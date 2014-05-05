@@ -58,6 +58,12 @@ function showResults(data) {
                     Accept: 'application/sparql-results+json'
                 },
 			success: function(datos) {	
+				// this is for Dydra triplestores, that employ a different JSON format
+				if (!datos.results && datos.rows) {
+					// reformat the results object
+					datos = reformatResultsForDydra(datos);
+				}
+				
 				// log
 				var message = resultsObj.sparql + "\n=> " + 
 					datos.results.bindings.length + " results";

@@ -61,7 +61,12 @@ function showInstance(uri, typeId) {
             	       	format: 'json',
 						Accept: 'application/sparql-results+json'
     		           },
-				success: function(datos) {	
+				success: function(datos) {
+					// this is for Dydra triplestores, that employ a different JSON format
+					if (!datos.results && datos.rows) {
+						// reformat the results object
+						datos = reformatResultsForDydra(datos);
+					}
 					// store results						
 					instanceObj.rootFacet.data = datos;
 					instanceObj.success = true;
@@ -94,6 +99,11 @@ function showInstance(uri, typeId) {
                     Accept: 'application/sparql-results+json'
                 },
 				success: function(datos) {	
+					// this is for Dydra triplestores, that employ a different JSON format
+					if (!datos.results && datos.rows) {
+						// reformat the results object
+						datos = reformatResultsForDydra(datos);
+					}
 					// store results						
 					facet.data = datos;
 				} 

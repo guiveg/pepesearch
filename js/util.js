@@ -185,3 +185,16 @@ function existsElement(test, array) {
 	});
 	return exists;
 }
+
+function reformatResultsForDydra(datos) {
+	datos.results = new Object();
+	datos.results.bindings = datos.rows;
+	delete datos.rows;
+	$.each(datos.results.bindings, function(i, resel) {					
+		$.each(datos.columns, function(j, col) {
+			resel[col] = resel[j];
+			delete resel[j];
+		});
+	});
+	return datos;
+}

@@ -38,20 +38,20 @@ Include the obtained file, e.g. `data.js`, in your deployment and edit the `inde
 
 Edit the parameters file, described below. For a sample parameters file, see the next section.
 
-*`sparqlBase`: URI of the SPARQL endpoint of interest. Note that this is the most important parameter...
+* `sparqlBase`: URI of the SPARQL endpoint of interest. Note that this is the most important parameter...
 
-*`sparqlLIMIT`: maximum number of results for a query.
+* `sparqlLIMIT`: maximum number of results for a query.
 
-*`sparqlLIMITinstance`: maximum number of related results for an instance record.
+* `sparqlLIMITinstance`: maximum number of related results for an instance record.
 
-*`maxSparqlLength`: limit for sending the query in a HTTP GET request. A HTTP POST request is sent if the query length is bigger.
+* `maxSparqlLength`: limit for sending the query in a HTTP GET request. A HTTP POST request is sent if the query length is bigger.
 
-*`optional`: if true, optional clauses are used in the query to gather more results.
+* `optional`: if true, optional clauses are used in the query to gather more results.
 
-*`literalQueryInclusion`: select the strategy for the inclusion of literals in the results. Choices are: 
-`limited` (only the literals that form part of the query), `all` (every possible literal of an instance - not recommended), `searchable`(something in the middle)
+* `literalQueryInclusion`: select the strategy for the inclusion of literals in the results. Choices are: 
+`limited` (only the literals that form part of the query), `all` (every possible literal of an instance - not recommended), `searchable`(something in the middle).
 
-*`deflang`: employed to set up the default language of PepeSearch
+* `deflang`: employed to set up the default language of PepeSearch.
 
 Sample Configuration File
 ==========
@@ -79,6 +79,3 @@ The following configuration file can be employed to query the [Norwegian Entity 
 	// language
 	parameters.userlang = (window.navigator.userLanguage || window.navigator.language).substring(0,2);
 	parameters.deflang = "nb";
-	
-
-

@@ -30,7 +30,7 @@ SPARQL query generation
 
 Behind the scenes, PepeSearch generates SPARQL queries that are sent to the endpoint. As an example, the following snippet corresponds to the SPARQL query created with PepeSearch in the first screenshot:
 
-        SELECT DISTINCT ?X ?X_display ?X_org_organisasjonsnummer ?X_org_stiftelsesdato ?X0 ?X0_display ?X0_rdf_label ?X2 ?X2_display ?X3 (str("OSLO") AS ?X3_display) ?X3_lok_kommunenummer 
+	SELECT DISTINCT ?X ?X_display ?X_org_organisasjonsnummer ?X_org_stiftelsesdato ?X0 ?X0_display ?X0_rdf_label ?X2 ?X2_display ?X3 (str("OSLO") AS ?X3_display) ?X3_lok_kommunenummer 
 	WHERE { 
 	  ?X a <http://data.computas.com/informasjonsmodell/organisasjon/Enhet> . 
 	  ?X <http://data.computas.com/informasjonsmodell/organisasjon/navn> ?X_display . 

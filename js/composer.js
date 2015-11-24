@@ -1,29 +1,29 @@
 /*
-  Copyright (c) 2013, Guillermo Vega-Gorgojo & Simen Heggestøyl
-  All rights reserved
- */
+   Copyright 2013-2014, Guillermo Vega-Gorgojo & Simen Heggestøyl
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+       http://www.apache.org/licenses/LICENSE-2.0
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
  
-function initPepesearch() {
+function init() {
 	//prepare page
-	var initmes = multilingual({"en": "What are you looking for?", "nb": "Hva leter du etter?"});
-	var back= "Tilbake"; // "Back"
-	var home = "Hjem"; // "Home"
-    var pid = "pepe";
-    var filter = "Filter..."; //"Filter..."	
-	
-	var content = 
-	'<div data-url="n" data-role="page" id="'+pid+'" class="page"> \
-		<div data-role="header" data-id="myheader" data-position="fixed"> \
-			<div class="ui-btn-left" data-role="controlgroup" data-type="horizontal" data-mini="true"> \
-				<a href="#" data-role="button" data-rel="back" data-icon="arrow-l">'+back+'</a> \
-				<a href="#init" data-role="button" data-icon="home">'+home+'</a> \
-			</div> \
-			<h1>'+initmes+'</h1> \
+	var initmes = {"en": "What are you looking for?", 
+		"nb": "Hva leter du etter?"};	
+	var content = '<div data-role="header" data-id="myheader" data-position="fixed"> \
+			<a href="#" data-role="button" data-rel="back" data-icon="arrow-l">'
+				+ multilingual({"en": "Back", "nb": "Tilbake"})+'</a> \
+			<h1>' + multilingual(initmes) + '</h1> \
 		</div> \
 		<div data-role="content"> \
 			<ul data-role="listview" data-inset="true" data-theme="c" \
-				data-divider-theme="c" data-filter="true" \
-				data-filter-placeholder="'+filter+'">';
+				data-divider-theme="c" data-filter="false" \
+				data-filter-placeholder="Filter...">';
 
 	for (var i=0; i<jsonTypes.length; i++) {
 		var type = jsonTypes[i];
@@ -37,18 +37,15 @@ function initPepesearch() {
 	
 	content += '</ul>';
 	content += '</div>';
-	content += '</div>';
 
-	// generate the mark-up	
-	var markup = $(content);
-	//append it to the page container
-	markup.appendTo($.mobile.pageContainer);
-	$.mobile.changePage("#" + pid, {
-		transition : 'slide'
-	});
-	
-	// initialization of pepesearch completed
-	Session.initpepe = false;
+	$(content).appendTo("#init");
+	// solved issue with the dynamic injection of content:
+	// http://stackoverflow.com/questions/14550396/jquery-mobile-markup-enhancement-of-dynamically-added-content	
+	$("#init").trigger('pagecreate');
+
+	//register init page
+	Composer.composerId = "init";
+    Composer.composerA.push(Composer.composerId);
 }
 
 function loadContent(cid, typeId) {

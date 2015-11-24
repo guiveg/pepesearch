@@ -1,32 +1,29 @@
 /*
-   Copyright 2013-2014, Guillermo Vega-Gorgojo & Simen Heggestøyl
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
+  Copyright (c) 2013, Guillermo Vega-Gorgojo & Simen Heggestøyl
+  All rights reserved
+ */
  
-function init() {
+function initPepesearch() {
 	//prepare page
-	var initmes = {"en": "What are you looking for?", 
-		"nb": "Hva leter du etter?"};	
-	var content = '<div data-role="header" data-id="myheader" data-position="fixed"> \
-			<a href="#" data-role="button" data-rel="back" data-icon="arrow-l">'
-				+ multilingual({"en": "Back", "nb": "Tilbake"})+'</a> \
-			<h1>' + multilingual(initmes) + '</h1> \
+	var initmes = multilingual({"en": "What are you looking for?", "nb": "Hva leter du etter?"});
+	var back= "Tilbake"; // "Back"
+	var home = "Hjem"; // "Home"
+    var pid = "pepe";
+    var filter = "Filter..."; //"Filter..."	
+	
+	var content = 
+	'<div data-url="n" data-role="page" id="'+pid+'" class="page"> \
+		<div data-role="header" data-id="myheader" data-position="fixed"> \
+			<div class="ui-btn-left" data-role="controlgroup" data-type="horizontal" data-mini="true"> \
+				<a href="#" data-role="button" data-rel="back" data-icon="arrow-l">'+back+'</a> \
+				<a href="#init" data-role="button" data-icon="home">'+home+'</a> \
+			</div> \
+			<h1>'+initmes+'</h1> \
 		</div> \
 		<div data-role="content"> \
 			<ul data-role="listview" data-inset="true" data-theme="c" \
-				data-divider-theme="c" data-filter="false" \
-				data-filter-placeholder="Filter...">';
+				data-divider-theme="c" data-filter="true" \
+				data-filter-placeholder="'+filter+'">';
 
 	for (var i=0; i<jsonTypes.length; i++) {
 		var type = jsonTypes[i];
@@ -40,17 +37,19 @@ function init() {
 	
 	content += '</ul>';
 	content += '</div>';
+	content += '</div>';
 
-	$(content).appendTo("#init");
-	// solved issue with the dynamic injection of content:
-	// http://stackoverflow.com/questions/14550396/jquery-mobile-markup-enhancement-of-dynamically-added-content	
-	$("#init").trigger('pagecreate');
-
-	//register init page
-	Composer.composerId = "init";
-    Composer.composerA.push(Composer.composerId);
+	// generate the mark-up	
+	var markup = $(content);
+	//append it to the page container
+	markup.appendTo($.mobile.pageContainer);
+	$.mobile.changePage("#" + pid, {
+		transition : 'slide'
+	});
+	
+	// initialization of pepesearch completed
+	Session.initpepe = false;
 }
-
 
 function loadContent(cid, typeId) {
     // existing page
@@ -504,6 +503,27 @@ function formField(params) {
    			</div> \
 		</li>',
 
+		"datetimerange":
+        '<li data-role="fieldcontain"> \
+             <label class="left-block" type="datetimerange" for="{{propId}}"> \
+                {{propLabel}} \
+             </label> \
+             <div class="ui-grid-a"> \
+				<div class="ui-block-a"> \
+					<label class="left-label">'+multilingual({"en": "from", "nb": "fra"})+'</label> \
+					<input class="refinable" type="datetime-local" data-clear-btn="false" id="{{propId}}" \
+                    min="{{min}}-01-01T00:00:00" max="{{max}}-12-31T23:59:59" \
+                    value="{{min}}-01-01T00:00:00" > \
+				</div> \
+				<div class="ui-block-b"> \
+					<label class="left-label">'+multilingual({"en": "to", "nb": "til"})+'</label> \
+					<input class="refinable" type="datetime-local" data-clear-btn="false" id="{{propId}}_max" \
+                    min="{{min}}-01-01T00:00:00" max="{{max}}-12-31T23:59:59" \
+                    value="{{max}}-12-31T23:59:59" > \
+				</div> \
+			</div> \
+         </li>',
+
         "range":
         '<li data-role="fieldcontain"> \
            <div data-role="rangeslider"> \
@@ -689,7 +709,12 @@ function executeQuery() {
             			triplePA.push('FILTER ('+litVal.transform+'('+litvar+') >= '+litrest.min+')');
             			triplePA.push('FILTER ('+litVal.transform+'('+litvar+') <= '+litrest.max+')');
 	                }
-					break;			
+					break;
+				case 'datetimerange':
+					triplePA.push(varname+' <'+dataProp.uri+'> '+litvar+' .');
+					triplePA.push('FILTER ('+litvar+' >= "'+litrest.min+'"^^<http://www.w3.org/2001/XMLSchema#dateTime>)');
+            		triplePA.push('FILTER ('+litvar+' <= "'+litrest.max+'"^^<http://www.w3.org/2001/XMLSchema#dateTime>)');
+					break;	
 				case 'string':
 					switch(litVal.dataType) {
 						case 'langString':
@@ -879,6 +904,32 @@ function processFacet($facet,id) {
 					store = true;
 				}			
 				break;
+			case 'datetimerange':
+				// read values
+				var valmin = $li.find("#"+litrest.propId).val();
+				var valmax = $li.find("#"+litrest.propId+"_max").val();
+				// absolute min and max values
+				var absmin = $li.find("#"+litrest.propId).attr("min");
+				var absmax = $li.find("#"+litrest.propId+"_max").attr("max");
+				// check if different
+				if (valmin != absmin || valmax != absmax) {
+					var valmindate = new Date(valmin);
+					var valmaxdate = new Date(valmax);
+					// check if valmin and valmax are valid dates					
+					if (!isNaN(valmindate) && !isNaN(valmaxdate)) {
+						// only set constraints if the ranges are within the limits
+						if (valmindate.getTime() >= Date.parse(absmin) &&
+							valmindate.getTime() < Date.parse(absmax) &&
+							valmaxdate.getTime() <= Date.parse(absmax) &&
+							valmaxdate.getTime() > Date.parse(absmin)) {
+							// obtain min and max values
+							litrest.min = valmindate.toJSON().split(".")[0] + "+01:00";
+							litrest.max = valmaxdate.toJSON().split(".")[0] + "+01:00";
+							store = true;						
+						}
+					}
+				}			
+				break;				
 			case 'literalSet':
 				litrest.propId = litrest.propId.split("unset_")[1];
 				litrest.id = id+'_'+ litrest.propId;
@@ -916,5 +967,3 @@ function processFacet($facet,id) {
 	
 	return facet;
 }
-
-

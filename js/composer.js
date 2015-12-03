@@ -1,5 +1,5 @@
 /*
-   Copyright 2013-2014, Guillermo Vega-Gorgojo & Simen Heggestøyl
+   Copyright 2013-2015, Guillermo Vega-Gorgojo & Simen Heggestøyl
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -65,8 +65,10 @@ function loadContent(cid, typeId) {
 		
 		// get the relevant info for preparing the page
 		var rootType = getType(typeId);
-		var outgoing = getOutgoingLinks(typeId);
-		var incoming = getIncomingLinks(typeId);
+		var outgoing = consolidateLinks(getOutgoingLinks(typeId), "target");
+		var incoming = consolidateLinks(getIncomingLinks(typeId), "source");
+		//var outgoing = getOutgoingLinks(typeId);
+		//var incoming = getIncomingLinks(typeId);
 		
 		// obtain the facets: the root concept and any concept (even the root) connected 
 		// through an outgoing or through an incoming link => maybe adjust order...
@@ -128,6 +130,18 @@ function loadContent(cid, typeId) {
 		content.appendTo($.mobile.pageContainer);
 		$.mobile.changePage("#" + cid, {
 			transition: 'slide'
+		});
+
+		// activate more/less elements (introduced 3-dec-2015)
+		$.each( $(".more"), function(i, but) {
+			// obtain closest li element of the more button
+			var limore = $(but).closest("li");
+			// hide the following siblings in the list
+			limore.nextAll().hide();
+			// update view
+			var $ul = $(but).closest("ul");
+			$ul.listview("refresh");
+			$ul.trigger( "updatelayout");
 		});
 
 		// change theme
@@ -253,7 +267,87 @@ function loadContent(cid, typeId) {
 				$(this).closest('.facet').find('.displayedclass').text(classLabel);   
 			}
 			// set non-default value...
-        	$(this).closest('.subclasses').attr("default","false");		
+        	$(this).closest('.subclasses').attr("default","false");
+        	
+        	
+        	// (addition 26 nov 2015)
+        	// THE LITERALS CAN BE DIFFERENT FOR CLASSES
+        	var typeId = $(this).attr("typeId");
+        	var facetData = getFacetData(typeId);
+        	$.each($(this).closest('.subclasses').nextAll(), function(i, li) {			
+				var $el = $(li).find('[for]');
+				if ($el != undefined) {
+					var prop = $el.attr('for');
+					// only check within the searchable literal values (hidden in other case)
+					var exists = _.find(facetData.literalValues, function(el) {return el.propId === prop;});
+					if (exists === undefined) {
+						// hide element
+						$(li).hide();
+					}
+					else {
+						// show element
+						$(li).show();
+					}
+				}
+			});
+			// if there are otherliterals, show the more button
+			if (facetData.otherLiteralValues.length >0 ) {
+				$(this).closest('.facet').find('.more').closest("li").show();
+				$(this).closest('.facet').find('.less').closest("li").hide();
+			}
+			else { // hide the more and less buttons			
+				$(this).closest('.facet').find('.more').closest("li").hide();
+				$(this).closest('.facet').find('.less').closest("li").hide();
+			}	
+						
+			
+			// (addition 3 dec 2015)
+        	// SETTING A NEW CLASS FOR THE ROOT TYPE MAY CHANGE THE LIST OF FACETS
+        	// (MORE SPECIFIC CLASSES MAY HAVE LESS LINKS WITH OTHER CLASSES)
+        	if ($(this).closest('.facet').is('ul') ) {
+        		//console.log("Nuevo tipo: "+typeId);
+        		// get facets of the new type
+        		var outlink = consolidateLinks(getOutgoingLinks(typeId), "target");
+				var inlink = consolidateLinks(getIncomingLinks(typeId), "source");
+				var newfacets = [];		
+				$.each(outlink, function(i,el) {
+					if (!existsElement(el.target, newfacets))
+					newfacets.push(el.target);
+				});
+				$.each(inlink, function(i,el) {
+					if (!existsElement(el.source, newfacets))
+					newfacets.push(el.source);
+				});
+				// evaluate if existing facets are shown or hidden
+        		$.each( $("#"+cid+" div.facet"), function(i, facet) {
+        			var facettypeid = $(facet).find('.signature').attr("typeId");
+        			var hide = true; 
+        			// show if there is one newfacet with the same type or a subclass of it
+        			$.each(newfacets, function(j, newfacet) {
+        				if (newfacet === facettypeid)
+        					hide = false;
+        				else if (isSuperClassOf(facettypeid, newfacet))
+        					hide = true;        			
+        			});
+        			
+        			if (hide) {
+        				//console.log("Escondiendo faceta "+$(facet).find('.signature').attr("typeId"));
+        				$(facet).hide();
+        			}
+        			else {
+        				//console.log("Mostrando faceta "+$(facet).find('.signature').attr("typeId"));
+        				$(facet).show();
+        			}        		
+        		});     	
+        	}
+        	
+        	// update view (addition 3 dec 2015)        	
+			var $ul = $(this).closest(".facet");
+			if (!$ul.is('ul'))
+				$ul = $ul.find('ul');			
+			$ul.listview("refresh");
+			$ul.trigger( "updatelayout");        	
+        	
 			// stop event propagation
 			event.preventDefault();
 			event.stopPropagation();
@@ -314,6 +408,7 @@ function unsetLiteralResource($ul, propid) {
 
 function getFacetMarkup(typeId, facetData, rootMode) {
     var literals = facetData.literalValues;
+	var otherliterals = facetData.otherLiteralValues;      
     var subclasses = facetData.subclasses;
 
 	// always show, even if no literals or subclasses
@@ -330,7 +425,11 @@ function getFacetMarkup(typeId, facetData, rootMode) {
          {{{.}}} \
       {{/form_fields}} \
       {{#see_more}} \
-         <li data-icon="plus"><a href="#" class="more">{{seemes}}</a></li> \
+         <li data-icon="plus"><a href="#" class="more">{{seemore}}</a></li> \
+         {{#form_fields_more}} \
+         	{{{.}}} \
+		 {{/form_fields_more}} \
+         <li data-icon="minus"><a href="#" class="less">{{seeless}}</a></li> \
       {{/see_more}} \
     </ul>';
     
@@ -342,7 +441,11 @@ function getFacetMarkup(typeId, facetData, rootMode) {
         		{{{.}}} \
 			{{/form_fields}} \
 	        {{#see_more}} \
-        		<li data-icon="plus"><a href="#" class="more">{{seemes}}</a></li> \
+				<li data-icon="plus"><a href="#" class="more">{{seemore}}</a></li> \
+				{{#form_fields_more}} \
+					{{{.}}} \
+				{{/form_fields_more}} \
+				<li data-icon="minus"><a href="#" class="less">{{seeless}}</a></li> \
 			{{/see_more}} \
         </ul> \
 	</div>';
@@ -367,8 +470,10 @@ function getFacetMarkup(typeId, facetData, rootMode) {
         "typeId": typeId,
         "typeLabel": facetData.typeLabel,
         "form_fields": literals.map(formField),
-        "see_more": (facetData.otherLiteralValues.length > 0),
-        "seemes": multilingual({"en": "See more", "nb": "Se mer"})
+        "see_more": (otherliterals.length > 0),
+        "form_fields_more": otherliterals.map(formField),        
+        "seemore": multilingual({"en": "See more", "nb": "Se mer"}),
+        "seeless": multilingual({"en": "See less", "nb": "Se mindre"})
     };
 
 	return Mustache.render(template, data);
@@ -894,8 +999,9 @@ function processFacet($facet,id) {
 				}
 				break;
 			case 'range':
-				if ( ($li.find("#"+litrest.propId).val() != $li.find("#"+litrest.propId).attr("min"))
-                 || ($li.find("#"+litrest.propId+"_max").val() != $li.find("#"+litrest.propId+"_max").attr("max") )) {
+				// INCLUIDO REDONDEO A ENTERO PARA EVITAR PROBLEMAS CON FLOATS (3-dic-2015)							
+				if ( (Math.round($li.find("#"+litrest.propId).val()) != Math.round($li.find("#"+litrest.propId).attr("min")))
+                 || (Math.round($li.find("#"+litrest.propId+"_max").val()) != Math.round($li.find("#"+litrest.propId+"_max").attr("max")) )) {
                 	litrest.min = $li.find("#"+litrest.propId).val();
                 	litrest.max = $li.find("#"+litrest.propId+"_max").val();
 					store = true;

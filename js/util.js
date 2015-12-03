@@ -18,28 +18,6 @@
 UTILITY FUNCTIONS
 */
 
-/*
-var jsonSuperclassRelations = [];
-generateSuperclasses() ;
-
-function generateSuperclasses() {
-	// generate the superclasses from the subclass relations
-	jsonSubclassRelations.map(function(c) { addSuperclassRelations(c.typeId, c.subclasses); });
-}
-
-function addSuperclassRelations(superclass, subclasses) {
-	_.each(subclasses,
-		function(subclass) {		
-			var subtype = _.find(jsonSuperclassRelations,
-                         function(x) { return x.typeId == subclass; });
-		    if (subtype == null) {
-        		subtype = {"typeId": subclass, "superclasses": []};
-		        jsonSuperclassRelations.push(subtype);
-		    }
-		    subtype.superclasses.push(superclass);		
-		});
-}*/
-
 function getType(id) {
     return _.find(jsonTypes,
                   function(x) { return x.id == id; });
@@ -60,9 +38,96 @@ function getDatatypeProperty(id) {
                   function(x) { return x.id == id; });
 }
 
+function consolidateLinks(links, selector) {
+	// the list to retrieve
+	var conslinks = [];
+	
+	// get all the props set in the links
+	var props = _.pluck(_.uniq(links, function(link) { return link.propId; }), 'propId');
+	
+	// analyze each property
+	_.each(props, function(prop) {
+		// obtain the different types for property prop
+		var types = _.pluck(_.filter(links, function(x) { return x.propId === prop; }), selector);
+		// obtain the consolidated types
+		var constypes = [];
+		while (types.length > 0) {
+			// get all subclasses of the consolidated types
+			var allconstypes = [];
+			_.each(constypes, function(el) {
+				var alltypesEl = getAllSubclasses(el);
+				allconstypes = _.union(allconstypes, alltypesEl);
+			});			
+			// obtain candidate, removing first element of the array of types
+			var candidate = types.shift();
+			// check if already contained in allconstypes
+			if (!_.contains(allconstypes, candidate)) {
+				// it is necessary to include it, 
+				// check if there is a common ancestor in the list of types
+				_.each(types, function(typeval) {
+					// try to find a common ancestor
+					var ancestor = commonAncestor(candidate, [typeval]);
+					if (ancestor != null)
+						candidate = ancestor;			
+				});
+				// include the candidate
+				constypes.push(candidate);
+			}		
+		}		
+		
+		// prepare objects with consolidated links
+		_.each(constypes, function(ctype) {
+			var clink = {};
+			clink.propId = prop;
+			clink[selector] = ctype;
+			conslinks.push(clink);
+		});
+	});
+	
+	return conslinks;
+}
+
+function commonAncestor(typeA, typelistB) {
+	// prepare a new list for B, just in case
+	var newtypelistB = [];
+	
+	// get all subclasses of A
+	var alltypesA = getAllSuperclasses(typeA);
+	
+	var anc = null;
+	// evaluate all elements in B
+	_.each(typelistB, function(typeB) {
+		// evaluate
+		if (_.contains(alltypesA, typeB) && anc == null)
+			anc = typeB; 
+		// prepare list just in case...
+		var superclasses = getSuperclasses(typeB);
+		if (!_.isEmpty(superclasses))
+			newtypelistB = _.union(newtypelistB, superclasses);
+	});
+	// return the element found if exists
+	if (anc != null)
+		return anc;
+	// return null if it is not possible to follow
+	else if (_.isEmpty(newtypelistB))
+		return null;
+	// try with the new list
+	else
+		commonAncestor(typeA, newtypelistB);
+}
+
 function getLinks(id, dataset, selector) {
     var type = _.find(dataset, function(x) { return x.typeId == id; });
 
+    var links = [];
+    if (type) {
+        links = type[selector];
+    }
+
+	// why add links from super- or sub-classes?
+	// the analyzer should just extract the relevant links for the class at hand
+	// changed on 26/11/2015        	
+	/*
     var superclasses = getSuperclasses(id);
 
     var links = [];
@@ -72,11 +137,11 @@ function getLinks(id, dataset, selector) {
 
     if (superclasses != null) {
 	_.each(superclasses,
-	       function(superclass) {
-		   var newlinks = getLinks(superclass, dataset, selector);
-		   links = _.union(links, newlinks);
-               });
-    }
+		function(superclass) {
+			var newlinks = getLinks(superclass, dataset, selector);
+			links = _.union(links, newlinks);
+        });
+    }*/
 
     return links;    
 }
@@ -98,10 +163,38 @@ function getLiteralValue(typeId, propId) {
 	return _.find(litvals, function(x) { return x.propId == propId; });
 }
 
+function getAllSubclasses(id) {
+	var all = [];
+	// add itself
+	all.push(id);
+	// recursively get subclasses
+	var subclasses = getSubclasses(id);	
+	if (!_.isEmpty(subclasses)) {
+        _.each(subclasses, function(subclass) {
+            all = _.union(all, getAllSubclasses(subclass));
+        });
+    }    
+	return all;
+}
+
 function getSubclasses(id) {
     var type = _.find(jsonSubclassRelations,
                       function(x) { return x.typeId == id; });
     return type && type.subclasses;
+}
+
+function getAllSuperclasses(id) {
+	var all = [];
+	// add itself
+	all.push(id);
+	// recursively call ancestors
+	var superclasses = getSuperclasses(id);	
+	if (!_.isEmpty(superclasses)) {
+        _.each(superclasses, function(superclass) {
+            all = _.union(all, getAllSuperclasses(superclass));
+        });
+    }     
+	return all;
 }
 
 function getSuperclasses(id) {

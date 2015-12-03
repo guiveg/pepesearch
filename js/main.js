@@ -1,5 +1,5 @@
 /*
-   Copyright 2013-2014, Guillermo Vega-Gorgojo & Simen Heggestøyl
+   Copyright 2013-2015, Guillermo Vega-Gorgojo & Simen Heggestøyl
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -50,32 +50,47 @@ $(document).ready( function() {
 		showInstance($(this).attr("uri"), $(this).attr("typeId"));
 	});
 
-	// handler for more attributes
+	// handler for more attributes (modified 3-dec-2015)
 	$('body').on("click", '.more', function(event) {
+		// obtain facet data
 		var typeId = $(this).closest(".facet").find(".signature").attr("typeId");
-		var $ul = $(this).closest("ul");
-		// remove see more button
-		$(this).closest("li").hide();
-		// add content
 		var facetData = getFacetData(typeId);
-		var facetmarkup = facetData.otherLiteralValues.map(formField);	
-		$ul.append(facetmarkup);
-		// add see less button
-		var lessmarkup = '<li data-icon="minus"><a href="#" class="less">'
-			+ multilingual({"en": "See less", "nb": "Se mindre"}) +'</a></li>';
-		$ul.append(lessmarkup);
+		// get li of the see more button
+		var $liplus = $(this).closest("li");
+		// find if the other literal values have to be shown or hidden
+		$.each($liplus.nextAll(), function(i, li) {
+			var $el = $(li).find('[for]');
+			if ($el != undefined) {
+				var prop = $el.attr('for');
+				// check within the other literal values
+				var exists = _.find(facetData.otherLiteralValues, function(el) {return el.propId === prop;});
+				if (exists === undefined) {
+					// hide element
+					$(li).hide();
+				}
+				else {
+					// show element
+					$(li).show();
+				}
+			}
+		});				
+		// hide see more button
+		$liplus.hide();
+		// show see less button
+		var $ul = $(this).closest("ul");
+		$ul.find(".less").closest("li").show();		
+
 		// update view
-		$ul.trigger('create');
 		$ul.listview("refresh");
 		$ul.trigger( "updatelayout");
 	});
 
-	// handler for less attributes
+	// handler for less attributes (modified 3-dec-2015)
 	$('body').on("click", '.less', function(event) {
 		var $ul = $(this).closest("ul");
 		var $liplus = $ul.find(".more").closest("li");
 		$liplus.show();
-		$liplus.nextAll().remove();
+		$liplus.nextAll().hide();
 		$ul.listview("refresh");
 		$ul.trigger( "updatelayout");
 	});

@@ -552,20 +552,23 @@ function getSubclassHTML(typeId, rootfacet) {
 }
 
 function getSubclassesListview(typeId) {
-    var label = multilingual( getType(typeId).label );
-    var subclasses = getSubclasses(typeId);
-    var content = '<li><a href="#" class="selectable" typeId="'+typeId+'">';
-    content += label +'</a></li>';
-	_.each(subclasses, function(subclass) {
-		content += getSubclassesListview(subclass);
-    });    
+    var content = '';
+    // 9-dec-15: refinement to extract all the subclasses without repetitions (including itself) for the listview
+    var allsubclasses = getAllSubclasses(typeId);
+    allsubclasses = _.sortBy(allsubclasses, function(subclass) { return multilingual(getType(subclass).label).toLowerCase();});
+    _.each(allsubclasses, function(subclass) {
+    	var label = multilingual( getType(subclass).label );
+		content += '<li><a href="#" class="selectable" typeId="'+subclass+'">';
+   		content += label +'</a></li>';
+    });  
     return content;
 }
 
 function getSubclassesCollapsible(typeId) {
     var content = '';
     var label = multilingual( getType(typeId).label );
-    var subclasses = getSubclasses(typeId);
+    // 9-dec-15: refinement to extract the most general subclasses    
+    var subclasses = consolidateSubclasses(getSubclasses(typeId));
     if (_.isEmpty(subclasses)) {
         content += '<a href="#" data-role="button" class="selectable" typeId="'+typeId+'">' + label +'</a>';
     } else {

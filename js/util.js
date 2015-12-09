@@ -203,6 +203,34 @@ function getSuperclasses(id) {
     return type && type.superclasses;
 }
 
+// util function to extract the more general subclasses
+function consolidateSubclasses(subclasses) {
+	// classes to remove
+	var remove = [];
+	
+	// evaluate each subclass
+	_.each(subclasses, function(sc1) {
+		_.each(subclasses, function(sc2) {
+			if (sc1 !== sc2) {
+				if (isSuperClassOf(sc1, sc2)) {
+					// sc1 is more general, remove sc2
+					if (!_.contains(remove, sc2))
+						remove.push(sc2);
+				}
+			}
+		});
+    });
+	
+	// new list with the consolidated subclasses
+	var consclasses = [];
+	_.each(subclasses, function(sc) {
+		if (!_.contains(remove, sc))
+			consclasses.push(sc);	
+	});
+	
+	return consclasses;
+}
+
 // Return true if id1 is a superclass of id2
 function isSuperClassOf(id1, id2) {
     var superclasses = getSuperclasses(id2);

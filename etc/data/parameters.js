@@ -9,7 +9,10 @@
 
 var parameters = new Object();
 // SPARQL
-// Semicolon
+// set user and password in case that the SPARQL endpoint requires them
+//parameters.user = "";
+//parameters.password = "";
+// SPARQL endpoint
 parameters.sparqlBase = "http://data.computas.com:3030/sparql";
 //parameters.sparqlForwardBase = "http://data.computas.com:3030/sparql";
 parameters.forwarding = false;

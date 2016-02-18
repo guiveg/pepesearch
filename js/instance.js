@@ -40,8 +40,14 @@ function showInstance(uri, typeId) {
 		//var queryUrl =  parameters.sparqlBase + "?default-graph-uri=&query="
 		//	+ encodeURIComponent(instanceObj.rootFacet.sparql)
 		//	+"&format=json&timeout=0&debug=on";		
-		
-		
+		// handle authorization
+		var httpHeaders = {Accept : "application/sparql-results+json"};
+		if (parameters.user != undefined) {
+			httpHeaders = {
+				"Authorization": "Basic " + btoa( parameters.user+":"+parameters.password),
+				Accept : "application/sparql-results+json",     
+			};
+		}			
 		// only process the root query if needed
 		if (instanceObj.rootFacet.sparql === "") 
 			instanceObj.success = true;
@@ -49,12 +55,13 @@ function showInstance(uri, typeId) {
 			// set HTTP method as GET (default) or POST (lengthy queries)
 			var httpMethod = "GET";
 			if (instanceObj.rootFacet.sparql.length > parameters.maxSparqlLength)
-				var httpMethod = "POST";
+				var httpMethod = "POST";			
 			// root facet request
 			var request = $.ajax({
 				url: instanceObj.rootFacet.sparqlBase,//parameters.sparqlBase,//queryUrl,
 				dataType: "json",
 				type: httpMethod,
+				headers: httpHeaders,				
 				data: { 
                		    //queryLn: 'SPARQL',
             	       	query: instanceObj.rootFacet.sparql,
@@ -92,6 +99,7 @@ function showInstance(uri, typeId) {
 				url: facet.sparqlBase,//parameters.sparqlBase,//queryUrl,
 			dataType: "json",
 			type: httpMethod,
+			headers: httpHeaders,	
 			data: { 
                     //queryLn: 'SPARQL',
                     query: facet.sparql, 

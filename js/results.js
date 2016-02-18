@@ -42,15 +42,20 @@ function showResults(data) {
 		var httpMethod = "GET";
 		if (resultsObj.sparql.length > parameters.maxSparqlLength)
 			var httpMethod = "POST";
-		// generate query URL
-		//var queryUrl =  parameters.sparqlBase + "?query=" 
-		//	+ encodeURIComponent(resultsObj.sparql);
-			//+"&format=json";				
+		// handle authorization
+		var httpHeaders = {Accept : "application/sparql-results+json"};
+		if (parameters.user != undefined) {
+			httpHeaders = {
+    			"Authorization": "Basic " + btoa( parameters.user+":"+parameters.password),
+    			Accept : "application/sparql-results+json",     
+  			};
+		}
 		// retrieve results		
 		$.ajax({
 			url: resultsObj.sparqlBase,//parameters.sparqlBase,//queryUrl,
 			dataType: "json",
 			type: httpMethod,
+			headers: httpHeaders,
 			data: { 
                     //queryLn: 'SPARQL',
                     query: resultsObj.sparql, 

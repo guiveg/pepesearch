@@ -1,5 +1,5 @@
 /*
-   Copyright 2013-2015, Guillermo Vega-Gorgojo & Simen Heggestøyl
+   Copyright 2013-2016, Guillermo Vega-Gorgojo & Simen Heggestøyl
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -797,10 +797,17 @@ function executeQuery() {
 			// triples
 			switch(litrest.uiType) {
 				case 'literalSet':
-					var triple = varname+' <'+dataProp.uri+'> "'+litrest.value+'" .';
+					// 14-apr-2016: changed to match literals with string datatype										
+					var triple = '';
 					if (litrest.lang != undefined)
 						triple = varname+' <'+dataProp.uri+'> "'+litrest.value
-							+'"@'+litrest.lang+' .';						
+							+'"@'+litrest.lang+' .';
+					else {
+						//triple = varname+' <'+dataProp.uri+'> "'+litrest.value+'" .';
+						triple = '{{'+varname+' <'+dataProp.uri+'> "'+litrest.value+'" .}\n' 
+							+ 'UNION\n'
+							+ '{'+varname+' <'+dataProp.uri+'> "'+litrest.value+'"^^<http://www.w3.org/2001/XMLSchema#string> .}}';
+					}						
 					triplePA.push(triple);
 					litvar = '(str("'+litrest.value+'") AS ?'+litrest.id+')';					
 					break;

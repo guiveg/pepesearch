@@ -1,5 +1,5 @@
 /*
-   Copyright 2013-2014, Guillermo Vega-Gorgojo & Simen Heggestøyl
+   Copyright 2013-2016, Guillermo Vega-Gorgojo & Simen Heggestøyl
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.

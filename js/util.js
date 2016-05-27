@@ -28,6 +28,14 @@ function getHackType(id) {
                   function(x) { return x.id == id; });
 }
 
+function getTemplateProperty(id) {
+	if (typeof jsonTemplateProperties === 'undefined')
+		return;
+	else
+	    return _.find(jsonTemplateProperties,
+                  function(x) { return x.id == id; });
+}
+
 function getObjectProperty(id) {
     return _.find(jsonObjectProperties,
                   function(x) { return x.id == id; });
@@ -152,6 +160,13 @@ function getOutgoingLinks(id) {
 
 function getIncomingLinks(id) {
     return getLinks(id, jsonIncomingLinks, 'incomingLinks');
+}
+
+function getTemplateLinks(id) {
+	if (typeof jsonTemplateLinks === 'undefined')
+		return [];
+	else
+	    return getLinks(id, jsonTemplateLinks, 'templateLinks');
 }
 
 function getLiteralValues(id) {

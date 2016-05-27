@@ -49,6 +49,27 @@ $(document).ready( function() {
 	$('body').on("click", '.instance', function(event) {
 		showInstance($(this).attr("uri"), $(this).attr("typeId"));
 	});
+	
+	// 24-may-2016
+	// handler for augment/reduce the text in a field of the results table
+	$('body').on("click", '.moretext', function(event) {
+		//console.log($(this).attr('title'));
+		// put the expanded text		
+		$(this).siblings('span').html($(this).attr('texto'));		
+		// hide this button
+		$(this).addClass('ui-hidden-accessible');
+		// show the lesstext button
+		$(this).siblings('.lesstext').removeClass('ui-hidden-accessible');
+	});
+	$('body').on("click", '.lesstext', function(event) {
+		//console.log($(this).attr('title'));
+		// put the reduced text		
+		$(this).siblings('span').html($(this).attr('texto'));		
+		// hide this button
+		$(this).addClass('ui-hidden-accessible');
+		// show the moretext button
+		$(this).siblings('.moretext').removeClass('ui-hidden-accessible');
+	});
 
 	// handler for more attributes (modified 3-dec-2015)
 	$('body').on("click", '.more', function(event) {

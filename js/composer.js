@@ -12,6 +12,15 @@
 */
  
 function init() {
+	// redirect if needed
+	if (window.location.href.split(".html").length>1 &&  window.location.href.split(".html")[1].length>0) {
+		// obtain new url
+		var newurl = window.location.href.split(".html")[0]+".html";
+		// go to it		
+		window.location = newurl;
+		return;
+	}
+	
 	//prepare page
 	var initmes = {"en": "What are you looking for?", 
 		"nb": "Hva leter du etter?"};	
@@ -53,7 +62,7 @@ function loadContent(cid, typeId) {
     if (existsElement(cid,Composer.composerA)) {
     	Composer.composerId = cid;
     	$.mobile.changePage("#"+cid, {
-			transition : 'slide'
+			transition : 'none'
 		});
     }
 	// construct new page
@@ -63,39 +72,84 @@ function loadContent(cid, typeId) {
 		Composer.composerA.push(cid);
 		Composer.composerCount++;
 		
+		// prepare the markup for the root class
+		var rootFacetData = getFacetData(typeId, true);
+		var facetMarkup = 
+			'<ul class="facet" data-role="listview" data-inset="true" \
+		         data-divider-theme="b" data-mini="true"> \
+      			<li data-role="list-divider" class="signature" typeId="'+typeId+'">'
+      				+rootFacetData.typeLabel+'</li>'
+	      		+ getFacetMarkup(rootFacetData) + '</ul>';	
+		
 		// get the relevant info for preparing the page
 		var rootType = getType(typeId);
-		var outgoing = consolidateLinks(getOutgoingLinks(typeId), "target");
-		var incoming = consolidateLinks(getIncomingLinks(typeId), "source");
-		//var outgoing = getOutgoingLinks(typeId);
-		//var incoming = getIncomingLinks(typeId);
+		var outlinks = consolidateLinks(getOutgoingLinks(typeId), "target");
+		var inlinks = consolidateLinks(getIncomingLinks(typeId), "source");		
+		var templinks = consolidateLinks(getTemplateLinks(typeId), "target");
 		
-		// obtain the facets: the root concept and any concept (even the root) connected 
-		// through an outgoing or through an incoming link => maybe adjust order...
-		var facets = new Array();		
-		//facets.push(typeId);
-		$.each(outgoing, function(i,el) {
-			if (!existsElement(el.target, facets))
-				facets.push(el.target);
-		});
-		$.each(incoming, function(i,el) {
-			if (!existsElement(el.source, facets))
-				facets.push(el.source);
-		});
-		facets.unshift(typeId);
-		
-		// obtain markup of the facets
-		var facetMarkup ="";
-		$.each(facets, function(i,fid) {			
-			if (i==0) {
-				var facetData = getFacetData(fid, true);
-				facetMarkup += getFacetMarkup(fid, facetData, true);
-			}
-			else {
-				var facetData = getFacetData(fid, false);
-				facetMarkup += getFacetMarkup(fid, facetData, false);
-			}
-		});
+		// take into account the hidePropertiesMode
+		if (parameters.hidePropertiesMode) {
+			// obtain the classes from all existing links
+			var facets = [];
+			$.each(templinks, function(i,el) {
+				if (!existsElement(el.target, facets))
+					facets.push(el.target);
+			});
+			$.each(outlinks, function(i,el) {
+				if (!existsElement(el.target, facets))
+					facets.push(el.target);
+			});
+			$.each(inlinks, function(i,el) {
+				if (!existsElement(el.source, facets))
+					facets.push(el.source);
+			});
+			// then for each facet include skeleton markup of a collapsible
+			_.each(facets, function(fct) {
+				// lazy creation of facets
+				var typeLabel = multilingual( getType(fct).label );
+				facetMarkup += 
+					'<div class="facet lazy" data-role="collapsible" data-theme="d" data-content-theme="c"> \
+						<h4 class="signature" typeId="'+fct+'">'+ typeLabel+ '</h4> \
+						<ul data-role="listview" data-inset="true" data-mini="true"> \
+						</ul> \
+					</div>';
+			});
+		}
+		else {
+			// with the consolidated links prepare a list of property-types
+			var allLinks = _.union(templinks, outlinks, inlinks);
+			var props = _.pluck(_.uniq(allLinks, function(link) { return link.propId; }), 'propId');
+			var propTypes = [];
+			_.each(props, function(prop) {
+				// create an element with the property and the list of types
+				var el = {};
+				el.propId = prop;
+				el.types = _.uniq(_.union(
+					_.pluck(_.filter(outlinks, function(x) { return x.propId === prop; }), "target"),
+					_.pluck(_.filter(inlinks, function(x) { return x.propId === prop; }), "source"),
+					_.pluck(_.filter(templinks, function(x) { return x.propId === prop; }), "target")));			
+				// include element
+				propTypes.push(el);
+			});
+			// for each element in the list of property-types prepare a skeleton markup of a collapsible
+			_.each(propTypes, function(propType) {
+				// obtain the facet data of the corresponding type
+				_.each(propType.types, function(tid) {
+					// lazy creation of facets
+					// obtain labels for the type and the property								
+					var typeLabel = multilingual( getType(tid).label );
+					var propLabel = getObjectProperty(propType.propId)===undefined? 
+						multilingual( getTemplateProperty(propType.propId).label ) : multilingual( getObjectProperty(propType.propId).label );
+					facetMarkup += 
+						'<div class="facet lazy" data-role="collapsible" data-theme="d" data-content-theme="c"> \
+							<h4 class="signature" typeId="'+tid+'" propId="'+propType.propId+'">'
+								+ propLabel + ' --> ' + typeLabel+ '</h4> \
+							<ul data-role="listview" data-inset="true" data-mini="true"> \
+							</ul> \
+						</div>';
+				});
+			});			
+		}
 		
 		//prepare page
 		var template =
@@ -129,20 +183,8 @@ function loadContent(cid, typeId) {
 		//append it to the page container
 		content.appendTo($.mobile.pageContainer);
 		$.mobile.changePage("#" + cid, {
-			transition: 'slide'
-		});
-
-		// activate more/less elements (introduced 3-dec-2015)
-		$.each( $(".more"), function(i, but) {
-			// obtain closest li element of the more button
-			var limore = $(but).closest("li");
-			// hide the following siblings in the list
-			limore.nextAll().hide();
-			// update view
-			var $ul = $(but).closest("ul");
-			$ul.listview("refresh");
-			$ul.trigger( "updatelayout");
-		});
+			transition: 'none'
+		});	
 
 		// change theme
 		$("div .facet").bind("expand", function() {
@@ -161,13 +203,8 @@ function loadContent(cid, typeId) {
                 	.addClass('ui-btn-up-d').attr('data-theme', 'd');
             }
 		});	
-
-		// subclassing: show either the listview or the collapsible
-		$("#"+cid+" .subclasslist").children("ul").children("li").addClass('hide');
-		$("#"+cid+" .subclasslist").find("input").focusin(function() {
-			$("#"+cid+" .subclasslist").children("ul").children("li").removeClass('hide');
-			$("#"+cid+" .subclasscol").hide();
-		});
+		
+		// subclassing: hide listviews and show collapsibles in case of out of focus click
 		$("#"+cid).click(function(e) {
 			if (! $("#"+cid+" .subclasslist").find("input").is(":focus") ) {
 				$("#"+cid+" .subclasslist").children("ul").children("li").addClass('hide');
@@ -175,187 +212,275 @@ function loadContent(cid, typeId) {
 			}
 		});
 		
-		// initialization: expand the second collapsible
-		$("#"+cid+" .subclasscol").find("div[data-role='collapsible']:first")
-			.find("div[data-role='collapsible']:first").trigger('expand');
+		// 22-may-16 initialize root facet
+		initializeFacet($("#"+cid+" ul.facet").first());
 		
-		// subclassing: process keystrokes
-		$("#"+cid+" .subclasslist").on('keypress keydown', function(event) {
-			var $ul = $(this).closest('li').find('ul');
-			// if return, select item in autovalue or search results
-			var code = event.keyCode || event.which;
-			if ( (code == 13) && (event.type=="keypress") ) { //Enter keycode
-				var $selli = $ul.children('.ui-btn-hover-c');
-				if ($selli.length == 1) {
-					$selli.removeClass('ui-btn-hover-c');
-					// select item
-					$selli.find('.selectable').click();				
-				}
-				// stop propagation to prevent query execution
-				event.stopPropagation();
-				return;
- 			}
-	 		else if (code == 40) { // down arrow
-	 			if (event.type == "keydown") {	 				
-	 				var $prevli = $ul.children(':visible .ui-btn-hover-c').first();
-	 				var $newli;
-	 				if ($prevli.length == 0)
-	 					$newli = $ul.children(':visible').first();
-	 				else {
-	 					$newli = $prevli;
-	 					do {
-	 						$newli = $newli.next();
-	 					}
-	 					while ( ($newli.length > 0) && ($newli.is(':hidden')) );
-	 					if ($newli.length == 0)
-	 						$newli = $ul.children(':visible').first();
-	 				} 				
-		 			$ul.children().removeClass('ui-btn-hover-c');
- 					$newli.addClass('ui-btn-hover-c');
- 				}
- 				return;
-	 		}
- 			else if (code == 38)  { // up arrow
- 				if (event.type == "keydown") {
- 					var $prevli = $ul.children(':visible .ui-btn-hover-c').first();
-	 				var $newli;
-	 				if ($prevli.length == 0)
-	 					$newli = $ul.children(':visible').last();
-	 				else {
-	 					$newli = $prevli;
-	 					do {
-	 						$newli = $newli.prev();
-	 					}
-	 					while ( ($newli.length > 0) && ($newli.is(':hidden')) );
-	 					if ($newli.length == 0)
-	 						$newli = $ul.children(':visible').last();
-	 				} 				
-		 			$ul.children().removeClass('ui-btn-hover-c');
- 					$newli.addClass('ui-btn-hover-c');
-	 			}
-	 			return;
- 			}
-		});		
-		
-		// subclassing: process class selection
-		$("#"+cid+" .selectable").on('click', function(event) {
-			// hide listview and show collapsible
-			$(this).closest('.subclasses').find("li").addClass('hide');
-			$(this).closest('.subclasses').children(".subclasscol").show();
-			// collapse collapsible
-			$(this).closest('.subclasses').children(".subclasscol").find("div[data-role='collapsible']:first").trigger('collapse');
-			// change heading if required
-			var classLabel = multilingual( getType($(this).attr("typeId")).label );	
-			var formerTypeId = $(this).closest('ul.facet').find('.signature').attr("typeId");
-			var formerPageTypeId = $("#"+cid).attr("typeId");
-			if (formerTypeId === formerPageTypeId) {
-				$("#"+cid).attr("typeId", $(this).attr("typeId") );
-				$("#"+cid).find("h1.ui-title").html("Refine "+classLabel);
-			}
-			// change facet
-			$(this).closest('.facet').find('.signature').attr("typeId", $(this).attr("typeId"));
-			if ($(this).closest('.facet').find('.signature').is('li') ) {
-				// change facet label
-				$(this).closest('.facet').find('.signature').text(classLabel);   
-				// change collapsible label
-				$(this).closest('.facet').find('.displayedclass').text(classLabel);   
-			}
-			else {
-				// change facet label
-				$(this).closest('.facet').find('.signature').find('.ui-btn-text').text(classLabel);
-				// change collapsible label
-				$(this).closest('.facet').find('.displayedclass').text(classLabel);   
-			}
-			// set non-default value...
-        	$(this).closest('.subclasses').attr("default","false");
-        	
-        	
-        	// (addition 26 nov 2015)
-        	// THE LITERALS CAN BE DIFFERENT FOR CLASSES
-        	var typeId = $(this).attr("typeId");
-        	var facetData = getFacetData(typeId);
-        	$.each($(this).closest('.subclasses').nextAll(), function(i, li) {			
-				var $el = $(li).find('[for]');
-				if ($el != undefined) {
-					var prop = $el.attr('for');
-					// only check within the searchable literal values (hidden in other case)
-					var exists = _.find(facetData.literalValues, function(el) {return el.propId === prop;});
-					if (exists === undefined) {
-						// hide element
-						$(li).hide();
-					}
-					else {
-						// show element
-						$(li).show();
-					}
-				}
-			});
-			// if there are otherliterals, show the more button
-			if (facetData.otherLiteralValues.length >0 ) {
-				$(this).closest('.facet').find('.more').closest("li").show();
-				$(this).closest('.facet').find('.less').closest("li").hide();
-			}
-			else { // hide the more and less buttons			
-				$(this).closest('.facet').find('.more').closest("li").hide();
-				$(this).closest('.facet').find('.less').closest("li").hide();
-			}	
-						
-			
-			// (addition 3 dec 2015)
-        	// SETTING A NEW CLASS FOR THE ROOT TYPE MAY CHANGE THE LIST OF FACETS
-        	// (MORE SPECIFIC CLASSES MAY HAVE LESS LINKS WITH OTHER CLASSES)
-        	if ($(this).closest('.facet').is('ul') ) {
-        		//console.log("Nuevo tipo: "+typeId);
-        		// get facets of the new type
-        		var outlink = consolidateLinks(getOutgoingLinks(typeId), "target");
-				var inlink = consolidateLinks(getIncomingLinks(typeId), "source");
-				var newfacets = [];		
-				$.each(outlink, function(i,el) {
-					if (!existsElement(el.target, newfacets))
-					newfacets.push(el.target);
-				});
-				$.each(inlink, function(i,el) {
-					if (!existsElement(el.source, newfacets))
-					newfacets.push(el.source);
-				});
-				// evaluate if existing facets are shown or hidden
-        		$.each( $("#"+cid+" div.facet"), function(i, facet) {
-        			var facettypeid = $(facet).find('.signature').attr("typeId");
-        			var hide = true; 
-        			// show if there is one newfacet with the same type or a subclass of it
-        			$.each(newfacets, function(j, newfacet) {
-        				if (newfacet === facettypeid)
-        					hide = false;
-        				else if (isSuperClassOf(facettypeid, newfacet))
-        					hide = true;        			
-        			});
-        			
-        			if (hide) {
-        				//console.log("Escondiendo faceta "+$(facet).find('.signature').attr("typeId"));
-        				$(facet).hide();
-        			}
-        			else {
-        				//console.log("Mostrando faceta "+$(facet).find('.signature').attr("typeId"));
-        				$(facet).show();
-        			}        		
-        		});     	
-        	}
-        	
-        	// update view (addition 3 dec 2015)        	
-			var $ul = $(this).closest(".facet");
-			if (!$ul.is('ul'))
-				$ul = $ul.find('ul');			
-			$ul.listview("refresh");
-			$ul.trigger( "updatelayout");        	
-        	
-			// stop event propagation
-			event.preventDefault();
-			event.stopPropagation();
-		});		
-		
+		// 21-may-2016 lazy inclusion of facet data after expansion
+		$("div .facet.lazy").bind("expand", function(event) {
+			$(this).unbind(event); // only call once this method!
+			// obtain facet data and markup
+			var facetData = getFacetData($(this).find('.signature').attr('typeId'), false);
+			var facetMarkup = getFacetMarkup(facetData);
+			// include markup within the ul element
+			var $ul = $(this).find('ul');
+			$ul.append(facetMarkup);
+			// refresh collapsible
+			$(this).collapsible().trigger("create");			
+			// initialize facet
+			initializeFacet($(this));
+		});
 	} //end else
 }
 
+function initializeFacet($facet) {
+	// 1) hide subsequent elements of the more button (if exists)
+	// obtain closest li element of the more button
+	var limore = $facet.find(".more").closest("li");
+	// hide the following siblings in the list
+	limore.nextAll().hide();
+	
+	// 2) subclassing: show either the listview or the collapsible
+	$facet.find(".subclasslist").children("ul").children("li").addClass('hide');
+	$facet.find(".subclasslist").find("input").focusin(function() {
+		$facet.find(".subclasslist").children("ul").children("li").removeClass('hide');
+		$facet.find(".subclasscol").hide();
+	});
+	
+	// 3) initialization: expand the second collapsible
+	$facet.find(".subclasscol").find("div[data-role='collapsible']:first")
+		.find("div[data-role='collapsible']:first").trigger('expand');
+	
+	// 4) subclassing: process keystrokes
+	$facet.find(".subclasslist").on('keypress keydown', function(event) {
+		var $ul = $(this).closest('li').find('ul');
+		// if return, select item in autovalue or search results
+		var code = event.keyCode || event.which;
+		if ( (code == 13) && (event.type=="keypress") ) { //Enter keycode
+			var $selli = $ul.children('.ui-btn-hover-c');
+			if ($selli.length == 1) {
+				$selli.removeClass('ui-btn-hover-c');
+				// select item
+				$selli.find('.selectable').click();				
+			}
+			// stop propagation to prevent query execution
+			event.stopPropagation();
+			return;
+		}
+		else if (code == 40) { // down arrow
+			if (event.type == "keydown") {	 				
+				var $prevli = $ul.children(':visible .ui-btn-hover-c').first();
+				var $newli;
+				if ($prevli.length == 0)
+					$newli = $ul.children(':visible').first();
+				else {
+					$newli = $prevli;
+					do {
+						$newli = $newli.next();
+					}
+					while ( ($newli.length > 0) && ($newli.is(':hidden')) );
+					if ($newli.length == 0)
+						$newli = $ul.children(':visible').first();
+				} 				
+				$ul.children().removeClass('ui-btn-hover-c');
+				$newli.addClass('ui-btn-hover-c');
+			}
+			return;
+		}
+		else if (code == 38)  { // up arrow
+			if (event.type == "keydown") {
+				var $prevli = $ul.children(':visible .ui-btn-hover-c').first();
+				var $newli;
+				if ($prevli.length == 0)
+					$newli = $ul.children(':visible').last();
+				else {
+					$newli = $prevli;
+					do {
+						$newli = $newli.prev();
+					}
+					while ( ($newli.length > 0) && ($newli.is(':hidden')) );
+					if ($newli.length == 0)
+						$newli = $ul.children(':visible').last();
+				} 				
+				$ul.children().removeClass('ui-btn-hover-c');
+				$newli.addClass('ui-btn-hover-c');
+			}
+			return;
+		}
+	});
+	
+	// 5) subclassing: process class selection
+	$facet.find(".selectable").on('click', function(event) {
+		// hide listview and show collapsible
+		$(this).closest('.subclasses').find("li").addClass('hide');
+		$(this).closest('.subclasses').children(".subclasscol").show();
+		// collapse collapsible
+		$(this).closest('.subclasses').children(".subclasscol").find("div[data-role='collapsible']:first").trigger('collapse');
+		// change heading if required
+		var classLabel = multilingual( getType($(this).attr("typeId")).label );	
+		var formerTypeId = $(this).closest('ul.facet').find('.signature').attr("typeId");
+		var formerPageTypeId = $facet.closest(".page").attr("typeId");
+		if (formerTypeId === formerPageTypeId) {
+			$facet.closest(".page").attr("typeId", $(this).attr("typeId") );
+			$facet.closest(".page").find("h1.ui-title").html("Refine "+classLabel);
+		}
+		// change facet
+		$facet.find('.signature').attr("typeId", $(this).attr("typeId"));
+		if ($facet.find('.signature').is('li') ) { // root
+			// change facet label
+			$facet.find('.signature').text(classLabel);   
+			// change collapsible label
+			$facet.find('.displayedclass').text(classLabel);   
+		}
+		else { // non-root
+			// change facet label
+			if (parameters.hidePropertiesMode)
+				$facet.find('.signature').find('.ui-btn-text').text(classLabel);
+			else {
+				// 22-may-2016 include property label 
+				var propid = $facet.find('.signature').attr("propId");
+				var propLabel = getObjectProperty(propid)===undefined? 
+						multilingual( getTemplateProperty(propid).label ) : multilingual( getObjectProperty(propid).label );
+				$facet.find('.signature').find('.ui-btn-text').text(propLabel + ' --> ' + classLabel);
+			}
+			// change collapsible label
+			$facet.find('.displayedclass').text(classLabel);   
+		}
+		// set non-default value...
+		$(this).closest('.subclasses').attr("default","false");
+		
+		// (addition 26 nov 2015)
+		// THE LITERALS CAN BE DIFFERENT FOR CLASSES
+		var typeId = $(this).attr("typeId");
+		var facetData = getFacetData(typeId);
+		$.each($(this).closest('.subclasses').nextAll(), function(i, li) {			
+			var $el = $(li).find('[for]');
+			if ($el != undefined) {
+				var prop = $el.attr('for');
+				// only check within the searchable literal values (hidden in other case)
+				var exists = _.find(facetData.literalValues, function(el) {return el.propId === prop;});
+				if (exists === undefined) {
+					// hide element
+					$(li).hide();
+				}
+				else {
+					// show element
+					$(li).show();
+				}
+			}
+		});
+		// if there are otherliterals, show the more button
+		if (facetData.otherLiteralValues.length >0 ) {
+			$facet.find('.more').closest("li").show();
+			$facet.find('.less').closest("li").hide();
+		}
+		else { // hide the more and less buttons			
+			$facet.find('.more').closest("li").hide();
+			$facet.find('.less').closest("li").hide();
+		}					
+		
+		// (addition 3 dec 2015)
+		// SETTING A NEW CLASS FOR THE ROOT TYPE MAY CHANGE THE LIST OF FACETS
+		// (MORE SPECIFIC CLASSES MAY HAVE LESS LINKS WITH OTHER CLASSES)
+		if ($facet.is('ul') ) {
+			//console.log("Nuevo tipo: "+typeId);
+			
+			// get links of the new type
+			var outlinks = consolidateLinks(getOutgoingLinks(typeId), "target");
+			var inlinks = consolidateLinks(getIncomingLinks(typeId), "source");
+			var templinks = consolidateLinks(getTemplateLinks(typeId), "target");
+			
+			// evaluate taking into account the hidePropertiesMode
+			if (parameters.hidePropertiesMode) {
+				var newfacets = [];	
+				$.each(outlinks, function(i,el) {
+					if (!existsElement(el.target, newfacets))
+					newfacets.push(el.target);
+				});
+				$.each(inlinks, function(i,el) {
+					if (!existsElement(el.source, newfacets))
+					newfacets.push(el.source);
+				});				
+				$.each(templinks, function(i,el) {
+					if (!existsElement(el.target, newfacets))
+						newfacets.push(el.target);
+				});
+				// evaluate if existing facets are shown or hidden
+				$.each( $facet.closest(".page").find("div.facet"), function(i, fct) {
+					var facettypeid = $(fct).find('.signature').attr("typeId");
+					var hide = true; 
+					// show if there is one newfacet with the same type and there is no a superclass of it
+					$.each(newfacets, function(j, newfacet) {
+						if (newfacet === facettypeid)
+							hide = false;
+						else if (isSuperClassOf(facettypeid, newfacet))
+							hide = true;        			
+					});				
+					if (hide) 
+						$(fct).hide();
+					else 
+						$(fct).show();    		
+				});
+			}
+			else {
+				// with the consolidated links prepare a list of property-types
+				var allLinks = _.union(templinks, outlinks, inlinks);
+				var props = _.pluck(_.uniq(allLinks, function(link) { return link.propId; }), 'propId');
+				var newPropTypes = [];
+				_.each(props, function(prop) {
+					// create an element with the property and the list of types
+					var el = {};
+					el.propId = prop;
+					el.types = _.uniq(_.union(
+						_.pluck(_.filter(outlinks, function(x) { return x.propId === prop; }), "target"),
+						_.pluck(_.filter(inlinks, function(x) { return x.propId === prop; }), "source"),
+						_.pluck(_.filter(templinks, function(x) { return x.propId === prop; }), "target")));			
+					// include element
+					newPropTypes.push(el);
+				});
+			
+				// evaluate if existing facets are shown or hidden
+				$.each( $facet.closest(".page").find("div.facet"), function(i, fct) {
+					var facetpropid = $(fct).find('.signature').attr("propId");
+					var facettypeid = $(fct).find('.signature').attr("typeId");
+					//console.log("Property: "+facetpropid+" - Type: "+facettypeid);
+					var hide = true; 
+					// show if there is one newPropType with the same propId and same type (and there is no a superclass of it)
+					var newpt = _.find(newPropTypes, function(x) { return x.propId === facetpropid; });
+					//console.log("# new types: "+newpt.types.length);				
+					$.each(newpt.types, function(j, newtype) {
+						//console.log("New type: "+newtype);
+						if (newtype === facettypeid)
+							hide = false;
+						else if (isSuperClassOf(facettypeid, newtype))
+							hide = true;        			
+					});				
+					if (hide) 
+						$(fct).hide();
+					else 
+						$(fct).show();    		
+				});
+			}    	
+		}
+				
+		// update view (addition 3 dec 2015)        	
+		var $ul = $facet;
+		if (!$ul.is('ul'))
+			$ul = $ul.find('ul');			
+		$ul.listview("refresh");
+		$ul.trigger( "updatelayout");        	
+		
+		// stop event propagation
+		event.preventDefault();
+		event.stopPropagation();
+	});
+	
+	// FINALLY, UPDATE LISTVIEW
+	var $ul = $facet;
+	if (!$ul.is('ul'))
+		$ul = $ul.find('ul');
+	$ul.listview("refresh");
+	$ul.trigger( "updatelayout");
+}
 
 function modifyFacet($ul, data) {
 	// do operation
@@ -406,22 +531,14 @@ function unsetLiteralResource($ul, propid) {
 	$ul.trigger( "updatelayout");
 }
 
-function getFacetMarkup(typeId, facetData, rootMode) {
+// 21-may-2016 simplified the retrieval of facet markup 
+function getFacetMarkup(facetData) {
     var literals = facetData.literalValues;
 	var otherliterals = facetData.otherLiteralValues;      
     var subclasses = facetData.subclasses;
-
-	// always show, even if no literals or subclasses
-	/*
-    if (_.isEmpty(literals) && subclasses.noSubclasses) {
-        return '';
-    }*/
-
-    var templateRoot =
-    '<ul class="facet" data-role="listview" data-inset="true" \
-         data-divider-theme="b" data-mini="true"> \
-      <li data-role="list-divider" class="signature" typeId="{{typeId}}">{{typeLabel}}</li> \
-      {{#form_fields}} \
+    
+    var template =
+     '{{#form_fields}} \
          {{{.}}} \
       {{/form_fields}} \
       {{#see_more}} \
@@ -430,45 +547,18 @@ function getFacetMarkup(typeId, facetData, rootMode) {
          	{{{.}}} \
 		 {{/form_fields_more}} \
          <li data-icon="minus"><a href="#" class="less">{{seeless}}</a></li> \
-      {{/see_more}} \
-    </ul>';
-    
-    var templateCollapsible = 
-    '<div class="facet" data-role="collapsible" data-theme="d" data-content-theme="c"> \
-		<h4 class="signature" typeId="{{typeId}}">{{typeLabel}}</h4> \
-    	<ul data-role="listview" data-inset="true" data-mini="true"> \
-			{{#form_fields}} \
-        		{{{.}}} \
-			{{/form_fields}} \
-	        {{#see_more}} \
-				<li data-icon="plus"><a href="#" class="more">{{seemore}}</a></li> \
-				{{#form_fields_more}} \
-					{{{.}}} \
-				{{/form_fields_more}} \
-				<li data-icon="minus"><a href="#" class="less">{{seeless}}</a></li> \
-			{{/see_more}} \
-        </ul> \
-	</div>';
- 
-    // select correct template
-    var template;
-    if (rootMode)
-    	template = templateRoot;
-    else
-		template = templateCollapsible;
-		
-    if (subclasses.noSubclasses) {
+      {{/see_more}}';   
+
+	if (subclasses.noSubclasses) {
         subclasses = [];
     } 
     else {
-        subclasses.typeId = typeId;
+        subclasses.typeId = facetData.typeId; // 22-may-16 modified *****
         // include subclasses at the beginning of the literals array
         literals.splice(0, 0, subclasses);        
     }
 
     var data = {
-        "typeId": typeId,
-        "typeLabel": facetData.typeLabel,
         "form_fields": literals.map(formField),
         "see_more": (otherliterals.length > 0),
         "form_fields_more": otherliterals.map(formField),        
@@ -481,6 +571,7 @@ function getFacetMarkup(typeId, facetData, rootMode) {
 
 function getFacetData(typeId, rootfacet) {
     var facetData = new Object();
+    facetData.typeId = typeId; // 22-may-16 introduced *****
     facetData.typeLabel = multilingual( getType(typeId).label );
     
     // just include searchable datatype properties
@@ -669,31 +760,27 @@ function executeQuery() {
 	var variableA = new Array();
 	// array of triple patterns
 	var triplePA = new Array();
-    // array of triple patterns for forwarding
-	var tripleFPA = new Array();
 	
-	// get the relevant info for constructing the query
-	var rootType = getType($("#"+Composer.composerId).attr("typeId"));
-	var outgoing = getOutgoingLinks(rootType.id);
-	var incoming = getIncomingLinks(rootType.id);
-	
-	// get the facets
+	// set the root facet
 	var rootFacet = processFacet($("#"+Composer.composerId+" ul.facet").first(),"X");
 	rootFacet.optional = false;
 	query.facetsA.push(rootFacet);
+	
+	// get the relevant info for constructing the query
+	var rootType = getType($("#"+Composer.composerId).attr("typeId"));
+	var outlinks = getOutgoingLinks(rootType.id);
+	var inlinks = getIncomingLinks(rootType.id);
+	var templinks = getTemplateLinks(rootType.id);
+	
+	// get the facets 
 	$("#"+Composer.composerId+" div.facet").each(function(ind) {
 		if ( !$(this).hasClass('ui-collapsible-collapsed') ) {			
 			var facet = processFacet($(this),"X"+ind);
-			
-			/*
-			facet.optional = false;
-			if ( !facet.subclasses && (facet.literalA.length == 0) )
-				facet.optional = true;*/
 			query.facetsA.push(facet);
 		}
 	});
 
-	// process each facet
+	// process each facet (root type and property-types)
 	$.each(query.facetsA, function(j,facet) {
 		// get type
 		var type = getType(facet.typeId);
@@ -706,62 +793,98 @@ function executeQuery() {
 		// if optional... (opening)
 		if ( parameters.optional && facet.optional )
 			triplePA.push('OPTIONAL { ');
-					
-		// type restriction
-		// 5-feb: instanceHack for Semicolon NACE codes
-		if (parameters.instanceHack && type.forward) {
-			var hackType = getHackType(facet.typeId);
-			// prepare filter with all the instances of the class
-			var hackFilter;
-			if (hackType.instances.length > 0) {
-				hackFilter = "FILTER ("+varname+" IN (<"+hackType.instances[0]+">";
-				for (var i=1;i<hackType.instances.length;i++)
-					hackFilter += ", <"+hackType.instances[i]+">";
-				hackFilter +="))";
-			}
-			// insert the prepared triples
-			if (parameters.forwarding) {
-				tripleFPA.push(varname+' a <'+hackType.classUri+'> .');
-				if (hackFilter != undefined)
-					tripleFPA.push(hackFilter);
-			} 
-			else {
-				triplePA.push(varname+' a <'+hackType.classUri+'> .');
-				if (hackFilter != undefined)
-					triplePA.push(hackFilter);
-			}		
-		}
-		else {
-			if (parameters.forwarding && type.forward) {
-				tripleFPA.push(varname+' a <'+type.uri+'> .');
-			} else {
-				triplePA.push(varname+' a <'+type.uri+'> .');
-			}
-		}
 		
-		// links
-		//if (type.id !== rootType.id) {
+		// type restriction 28-apr-2016 *****
+		triplePA.push(varname+' a <'+type.uri+'> .');
+		
+		// links modified 28-apr-2016 ***** 
 		if (facet.id !== rootFacet.id) {
 			var auxA = new Array();
-			$.each(outgoing, function(i,el) {
-				if (el.target === type.id || isSuperClassOf(el.target, type.id)) {
-					var property = getObjectProperty(el.propId);
-					var triple = '?'+rootFacet.id+' <'+property.uri+'> '+varname;
-					// avoid repetitions
-					if (!existsElement(triple, auxA))
-						auxA.push(triple);
-				}
-			}); 
-			$.each(incoming, function(i,el) {
-				if (el.source === type.id) {				
-					//auxA.push(varname+' <'+property.uri+'> ?'+rootFacet.id);
-					var property = getObjectProperty(el.propId);
-					var triple = varname+' <'+property.uri+'> ?'+rootFacet.id;
-					// avoid repetitions
-					if (!existsElement(triple, auxA))
-						auxA.push(triple);					
-				}
-			}); 
+			
+			// different strategy depending on the hidePropertiesMode
+			if (parameters.hidePropertiesMode) {
+				$.each(outlinks, function(i,el) {
+					if (el.target === type.id || isSuperClassOf(el.target, type.id)) {
+						var property = getObjectProperty(el.propId);
+						var triple = '?'+rootFacet.id+' <'+property.uri+'> '+varname;
+						// avoid repetitions
+						if (!existsElement(triple, auxA))
+							auxA.push(triple);
+					}
+				}); 
+				$.each(inlinks, function(i,el) {
+					if (el.source === type.id || isSuperClassOf(el.source, type.id)) {				
+						//auxA.push(varname+' <'+property.uri+'> ?'+rootFacet.id);
+						var property = getObjectProperty(el.propId);
+						var triple = varname+' <'+property.uri+'> ?'+rootFacet.id;
+						// avoid repetitions
+						if (!existsElement(triple, auxA))
+							auxA.push(triple);					
+					}
+				});
+				$.each(templinks, function(i,el) {
+					if (el.target === type.id || isSuperClassOf(el.target, type.id)) {
+						var property = getTemplateProperty(el.propId);
+						var template = property.template;
+						// set source and target
+						var auxtemp = {};
+						auxtemp.source = '?'+rootFacet.id;
+						auxtemp.target = varname;
+						// apply moustache templating for the source and target					
+						var triple = Mustache.render(template, auxtemp);
+						// avoid repetitions
+						if (!existsElement(triple, auxA))
+							auxA.push(triple);		
+					}
+				});
+			}
+			else {
+				// obtain property from the facet data
+				var prop = getObjectProperty(facet.propId);	
+				// check if the property-type is outgoing, incoming or both	
+				$.each(outlinks, function(i,el) {
+					if (el.target === type.id || isSuperClassOf(el.target, type.id)) {
+						var auxprop = getObjectProperty(el.propId);
+						if (prop.id === auxprop.id) {
+							var triple = '?'+rootFacet.id+' <'+prop.uri+'> '+varname;
+							// avoid repetitions
+							if (!existsElement(triple, auxA))
+								auxA.push(triple);
+						}
+					}
+				}); 
+				$.each(inlinks, function(i,el) {
+					if (el.source === type.id || isSuperClassOf(el.source, type.id)) {
+						var auxprop = getObjectProperty(el.propId);
+						if (prop.id === auxprop.id) {
+							var triple = varname+' <'+prop.uri+'> ?'+rootFacet.id;
+							// avoid repetitions
+							if (!existsElement(triple, auxA))
+								auxA.push(triple);
+						}			
+					}
+				});
+				if (prop === undefined) // it's a template property
+					prop = getTemplateProperty(facet.propId);	
+				$.each(templinks, function(i,el) {
+					if (el.target === type.id || isSuperClassOf(el.target, type.id)) {
+						var auxprop = getTemplateProperty(el.propId);
+						if (prop.id === auxprop.id) {
+							var template = prop.template;
+							// set source and target
+							var auxtemp = {};
+							auxtemp.source = '?'+rootFacet.id;
+							auxtemp.target = varname;
+							// apply moustache templating for the source and target					
+							var triple = Mustache.render(template, auxtemp);
+							// avoid repetitions
+							if (!existsElement(triple, auxA))
+								auxA.push(triple);
+						}			
+					}
+				});
+			}
+			
 			// check number of possible links
 			if (auxA.length == 1) {
 				// common case
@@ -775,7 +898,7 @@ function executeQuery() {
 				triple += ' } .';
 				triplePA.push(triple);
 			}
-		}	
+		}			
 		
 		// only do this if there is a displayable property (not false)
 		if (type.display) {		
@@ -897,8 +1020,7 @@ function executeQuery() {
 			// include name 
 			variableA.push(litvar);
 		});
-
-		
+	
 		// if optional... (closing)
 		if ( parameters.optional && facet.optional )
 			triplePA.push('} ');
@@ -913,8 +1035,7 @@ function executeQuery() {
 				// remove
 				facet.literalA.splice(index, 1);
 			}		
-		}
-		
+		}		
 	});
 	
 	// sparql base url
@@ -926,32 +1047,9 @@ function executeQuery() {
 		query.sparql += ' '+variableA[i];
 	query.sparql += ' \nWHERE { \n';
 
-	// swap if forwarding and swapping enabled
-	if (parameters.forwarding && parameters.swapForwardedTriples) {
-		var tmp = triplePA;
-		triplePA = tripleFPA;
-		tripleFPA = tmp;
-    }
-
-    // triple patterns
+    // include triple patterns
 	for (var i=0;i<triplePA.length;i++)
 		query.sparql += triplePA[i]+' \n';
-		
-    // forwarded triple patterns
-    if (tripleFPA.length > 0) {
-    	// only use service if there are some triple patterns
-    	if (triplePA.length > 0) 
-			query.sparql += 'SERVICE <' + parameters.sparqlForwardBase + '> { \n';
-		// we need to swap the SPARQL endpoint in this case!!
-		else			
-			query.sparqlBase = parameters.sparqlForwardBase;
-		for (var i=0;i<tripleFPA.length;i++) {
-			query.sparql += tripleFPA[i]+' \n';
-        }
-        // only use service if there are some triple patterns
-    	if (triplePA.length > 0)
-			query.sparql += '}'; //for the SERVICE... 
-    }
 
 	query.sparql += '}';
 	// add LIMIT to the query
@@ -963,11 +1061,30 @@ function executeQuery() {
 function processFacet($facet,id) {
 	// get type info
 	var type = getType($facet.find('.signature').attr('typeId'));
+	
 	// prepare facet
 	var facet = new Object();
 	facet.id = id
 	facet.typeId = type.id;
-	facet.typeLabel = multilingual( type.label );
+	
+	// set label
+	if (parameters.hidePropertiesMode)
+		facet.typeLabel = multilingual( type.label );
+	else {
+		// get prop info
+		var prop = getObjectProperty($facet.find('.signature').attr('propId'));
+		// get template prop info
+		if (prop === undefined)
+			prop = getTemplateProperty($facet.find('.signature').attr('propId'));
+		// set prop id and label
+		if (prop === undefined || prop === null) 
+			facet.typeLabel = multilingual( type.label );
+		else {
+			facet.propId = prop.id;
+			facet.typeLabel = multilingual( prop.label ) + " --> " + multilingual( type.label );	
+		}
+	}
+	
 	facet.optional = true;
 	// basic display info, just in case...
 	facet.display = new Object();

@@ -24,7 +24,7 @@ function showInstance(uri, typeId) {
 		$.mobile.loading('hide');
 		// existing results page
 		$.mobile.changePage("#" + iid, {
-			transition : 'slide'
+			transition : 'none'
 		});	
 		// update instance id
 		Instance.instanceId = iid;
@@ -130,7 +130,10 @@ function showInstance(uri, typeId) {
 				Instance.instanceId = instanceObj.id;
 				// increment query counter
 				Instance.instanceCount++;
-				Instance.instanceA.push(instanceObj);
+				Instance.instanceA.push(instanceObj);				
+				// 23-may-2016 prune repetitions from superclasses
+				pruneRepetitions(instanceObj);				
+				// render page
 				renderInstance(instanceObj);
 			}
 			else {
@@ -146,6 +149,71 @@ function showInstance(uri, typeId) {
 			}
 		});
 	}	
+}
+
+// 23-may-2016
+function pruneRepetitions(instanceObj) {
+	if (parameters.hidePropertiesMode) {
+		_.each(instanceObj.facetsA, function(fdataA) {
+			_.each(instanceObj.facetsA, function(fdataB) {
+				// obtain types of the facets
+				var typeA = fdataA.typeId;
+				var typeB = fdataB.typeId;				
+				// check if typeA is a superclass of typeB
+				if (typeA !== typeB && isSuperClassOf(typeA, typeB)) {
+					pruneFacetRepetitions(fdataA, fdataB);
+				}
+			});			
+		});
+	}
+	else {
+		// for each property...
+		_.each(instanceObj.propTypes, function(propType) {
+			// check if typeA is a superclass of typeB
+			_.each(propType.types, function(typeA) {
+				_.each(propType.types, function(typeB) {
+					// originally only prune if typeA is the superclass
+					//if (typeA !== typeB && isSuperClassOf(typeA, typeB)) {
+					// instead prune if 1) typeA is the superclass or 2) typeA and typeB are not ancestors
+					if (typeA !== typeB && !isSuperClassOf(typeB, typeA)) {					
+						// obtain results for A and B
+						var fdataA = _.find(instanceObj.facetsA, function(fdata) {
+							return fdata.propId === propType.propId && fdata.typeId === typeA;
+						});
+						var fdataB = _.find(instanceObj.facetsA, function(fdata) {
+							return fdata.propId === propType.propId && fdata.typeId === typeB;
+						});
+						//console.log(propType.propId + " --> " + fdataA.typeLabel + " is superclass of " + fdataB.typeLabel);
+						pruneFacetRepetitions(fdataA, fdataB);					
+					}
+				});
+			});			
+		});
+	}
+}
+function pruneFacetRepetitions(fdataA, fdataB) {
+	// obtain the list of unique uris in A
+	var nobnA = _.filter(fdataA.data.results.bindings, function(el) { 
+		return el['X'].type === 'uri'; 					
+	});					
+	var urisA = _.uniq(_.map(nobnA, function(el){ return el['X'].value; }));				
+	// obtain the list of unique uris in B
+	var nobnB = _.filter(fdataB.data.results.bindings, function(el){ 
+		return el['X'].type === 'uri'; 					
+	});					
+	var urisB = _.uniq(_.map(nobnB, function(el) { return el['X'].value; }));
+	
+	// find intersection and prune repetitions in A
+	var urisAB = _.intersection(urisA, urisB);
+	if (urisAB.length > 0) {
+		//console.log(" There were #"+fdataA.data.results.bindings.length+" results");						
+		var prunedbindings = _.reject(fdataA.data.results.bindings, function(el){ 
+			var urival = el['X'].value;
+			return _.contains(urisAB, urival); 
+		});
+		fdataA.data.results.bindings = prunedbindings;												
+		//console.log(" There were #"+prunedbindings.length+" results after pruning");					
+	}
 }
 
 function renderInstance(instanceObj) {
@@ -186,7 +254,7 @@ function renderInstance(instanceObj) {
 	//append it to the page container
 	content.appendTo($.mobile.pageContainer);
 	$.mobile.changePage("#" + instanceObj.id, {
-		transition : 'slide'
+		transition : 'none'
 	});
 }
 
@@ -346,7 +414,8 @@ function getInstanceFacetMarkup(facet) {
 		orderedItems.push(items[index]);
 	});*/
 
-	var template =
+	// 23-may-2016 set appropriate template according to hidePropertiesMode
+	var template = 
     '<ul data-role="listview" class="facet" data-inset="true" \
          data-divider-theme="d" data-mini="true"> \
       <li data-role="list-divider" typeId="{{typeId}}">{{typeLabel}}</li> \
@@ -356,13 +425,28 @@ function getInstanceFacetMarkup(facet) {
 		</li> \
       {{/items}} \
     </ul>';
+	if (!parameters.hidePropertiesMode)
+		template = 
+		'<ul data-role="listview" class="facet" data-inset="true" \
+			 data-divider-theme="d" data-mini="true"> \
+		  <li data-role="list-divider" typeId="{{typeId}}" propId="{{propId}}">{{propLabel}} --> {{typeLabel}}</li> \
+		  {{#items}} \
+			<li data-role="fieldcontain"> \
+				{{{.}}} \
+			</li> \
+		  {{/items}} \
+		</ul>';
 
-    var data = {
+    var data = { // 28-apr-2016 introduced propId and propLabel *****
         "typeId": facet.typeId,
         "typeLabel": facet.typeLabel,
         "items": items
-    };
-
+    };    
+    if (!parameters.hidePropertiesMode) { // include propId and propLabel
+    	data.propId = facet.propId;
+    	data.propLabel = getObjectProperty(facet.propId) === undefined? 
+        	 multilingual( getTemplateProperty(facet.propId).label ) : multilingual( getObjectProperty(facet.propId).label );
+    }
     markup = Mustache.render(template, data);
 
 	return markup;
@@ -372,30 +456,67 @@ function getInstanceFacets(uri,typeId) {
 	var instanceObj = new Object();
 	instanceObj.uri = uri;
 	
-	// info for constructing the facets
-	var outgoing = getOutgoingLinks(typeId);
-	var incoming = getIncomingLinks(typeId);
-
 	// root facet
-	// 29-jan: changed the way of obtaining the root facet data
+	// 29-jan-2016: changed the way of obtaining the root facet data
 	instanceObj.rootFacet = getInstanceFacetData(typeId);
 	instanceObj.rootFacet.sparqlBase = parameters.sparqlBase;	
 	instanceObj.rootFacet.sparql = 'SELECT DISTINCT ?prop ?obj WHERE { <'+uri+'> ?prop ?obj }';
 	
-	// swap sparqlBase if forwarding and swapping enabled
-	if (parameters.forwarding && parameters.swapForwardedTriples) 
-		instanceObj.rootFacet.sparqlBase = parameters.sparqlForwardBase;
-	
 	// other facets
 	instanceObj.facetsA = new Array();
-	$.each(outgoing, function(i,el) {
-		if ( !containsValueArray(el.target, "typeId", instanceObj.facetsA) )
-			instanceObj.facetsA.push( getInstanceFacetData(el.target) );
-	}); 
-	$.each(incoming, function(i,el) {
-		if ( !containsValueArray(el.source, "typeId", instanceObj.facetsA) )
-			instanceObj.facetsA.push( getInstanceFacetData(el.source) );
-	}); 
+		
+	// info for constructing the other facets
+	var outlinks = getOutgoingLinks(typeId);
+	var inlinks = getIncomingLinks(typeId);
+	var templinks = getTemplateLinks(typeId);	
+
+	// take into account the hidePropertiesMode
+	if (parameters.hidePropertiesMode) {
+		// obtain the classes from all existing links		
+		$.each(templinks, function(i,el) {
+			if ( !containsValueArray(el.target, "typeId", instanceObj.facetsA) )
+				instanceObj.facetsA.push( getInstanceFacetData(el.target) );
+		}); 
+		$.each(outlinks, function(i,el) {
+			if ( !containsValueArray(el.target, "typeId", instanceObj.facetsA) )
+				instanceObj.facetsA.push( getInstanceFacetData(el.target) );
+		}); 
+		$.each(inlinks, function(i,el) {
+			if ( !containsValueArray(el.source, "typeId", instanceObj.facetsA) )
+				instanceObj.facetsA.push( getInstanceFacetData(el.source) );
+		});		
+	}
+	else {
+		// with the consolidated links prepare a list of property-types
+		var allLinks = _.union(templinks, outlinks, inlinks);
+		var props = _.pluck(_.uniq(allLinks, function(link) { return link.propId; }), 'propId');
+		var propTypes = [];
+		_.each(props, function(prop) {
+			// create an element with the property and the list of types
+			var el = {};
+			el.propId = prop;
+			el.types = _.uniq(_.union(
+				_.pluck(_.filter(outlinks, function(x) { return x.propId === prop; }), "target"),
+				_.pluck(_.filter(inlinks, function(x) { return x.propId === prop; }), "source"),
+				_.pluck(_.filter(templinks, function(x) { return x.propId === prop; }), "target")));				
+			// include element
+			propTypes.push(el);
+		});
+	
+		// create facet for each property-type 28-apr-2016 *****
+		_.each(propTypes, function(propType) {
+			// obtain the facet data of the corresponding type
+			_.each(propType.types, function(tid) {
+				var fdata = getInstanceFacetData(tid);
+				fdata.propId = propType.propId;
+				instanceObj.facetsA.push(fdata);
+			});
+		});
+	
+		// store propTypes for further processing when results arrive
+		instanceObj.propTypes = propTypes;	
+	}
+
 	// generate SPARQL query for each facet
 	$.each(instanceObj.facetsA, function(i,facet) {	
 		// CAUTION: display property might not exist
@@ -413,23 +534,79 @@ function getInstanceFacets(uri,typeId) {
 		
 		// array of triple patterns
 		var triplePA = new Array();
-    	// array of triple patterns for forwarding
-		var tripleFPA = new Array();
 		
-		// links
-		var auxA = new Array();
-		$.each(outgoing, function(i,el) {
-			if (el.target === facet.typeId) {
-				var property = getObjectProperty(el.propId);
-				auxA.push('<'+uri+'> <'+property.uri+'> ?X');
-			}
-		}); 
-		$.each(incoming, function(i,el) {
-			if (el.source === facet.typeId) {
-				var property = getObjectProperty(el.propId);
-				auxA.push('?X <'+property.uri+'> <'+uri+'>');
-			}
-		}); 
+		// type restriction 28-apr-2016 *****
+		triplePA.push('?X a <'+facet.typeUri+'> .');
+		
+		// auxiliar array for the construction of the SPARQL query
+		var auxA = new Array();		
+		
+		// take into account the hidePropertiesMode
+		if (parameters.hidePropertiesMode) {
+			$.each(outlinks, function(i,el) {
+				if (el.target === facet.typeId) {
+					var property = getObjectProperty(el.propId);
+					auxA.push('<'+uri+'> <'+property.uri+'> ?X');
+				}
+			}); 
+			$.each(inlinks, function(i,el) {
+				if (el.source === facet.typeId) {
+					var property = getObjectProperty(el.propId);
+					auxA.push('?X <'+property.uri+'> <'+uri+'>');
+				}
+			});
+			$.each(templinks, function(i,el) {
+				if (el.target === facet.typeId) {
+					var property = getTemplateProperty(el.propId);
+					var template = property.template;
+					// set source and target
+					var auxtemp = {};
+					auxtemp.source = '<'+uri+'>';
+					auxtemp.target = '?X';
+					// apply moustache templating for the source and target					
+					var triple = Mustache.render(template, auxtemp);
+					// include triple
+					auxA.push(triple);		
+				}
+			});			
+		}
+		else {
+			// obtain property from the facet data
+			var prop = getObjectProperty(facet.propId);	
+			// check if the property-type is outgoing, incoming or both	
+			$.each(outlinks, function(i,el) {
+				if (el.target === facet.typeId) {
+					var auxprop = getObjectProperty(el.propId);
+					if (prop.id === auxprop.id)
+						auxA.push('<'+uri+'> <'+prop.uri+'> ?X');
+				}
+			}); 
+			$.each(inlinks, function(i,el) {
+				if (el.source === facet.typeId) {
+					var auxprop = getObjectProperty(el.propId);
+					if (prop.id === auxprop.id)
+						auxA.push('?X <'+prop.uri+'> <'+uri+'>');
+				}
+			});
+			if (prop === undefined)
+				prop = getTemplateProperty(facet.propId);	
+			$.each(templinks, function(i,el) {
+				if (el.target === facet.typeId) {
+					var auxprop = getTemplateProperty(el.propId);
+					if (prop.id === auxprop.id) {
+						var template = prop.template;
+						// set source and target
+						var auxtemp = {};
+						auxtemp.source = '<'+uri+'>';
+						auxtemp.target = '?X';
+						// apply moustache templating for the source and target					
+						var triple = Mustache.render(template, auxtemp);
+						// include triple
+						auxA.push(triple);
+					}			
+				}
+			});		
+		}		 
 		// check number of possible links
 		if (auxA.length == 1)
 			// common case
@@ -441,37 +618,6 @@ function getInstanceFacets(uri,typeId) {
 				triple += ' } UNION  { '+auxA[ind];
 			triple += ' } .';
 			triplePA.push(triple);
-		}
-		
-		// type triple		
-		// 5-feb: instanceHack for Semicolon NACE codes
-		if (parameters.instanceHack && facet.forward) {
-			var hackType = getHackType(facet.typeUri);
-			// prepare filter with all the instances of the class
-			var hackFilter;
-			if (hackType.instances.length > 0) {
-				hackFilter = "FILTER (?X IN (<"+hackType.instances[0]+">";
-				for (var i=1;i<hackType.instances.length;i++)
-					hackFilter += ", <"+hackType.instances[i]+">";
-				hackFilter +="))";
-			}
-			// insert the prepared triples
-			if (parameters.forwarding) {
-				tripleFPA.push('?X a <'+hackType.classUri+'> .');
-				if (hackFilter != undefined)
-					tripleFPA.push(hackFilter);
-			} else {
-				triplePA.push('?X a <'+hackType.classUri+'> .');
-				if (hackFilter != undefined)
-					triplePA.push(hackFilter);
-			}		
-		}
-		else {
-			if (parameters.forwarding && type.forward) {
-				tripleFPA.push('?X a <'+facet.typeUri+'> .');
-			} else {
-				triplePA.push('?X a <'+facet.typeUri+'> .');
-			}
 		}
 		
 		// literal triples
@@ -488,28 +634,6 @@ function getInstanceFacets(uri,typeId) {
 		
 		// sparql base url
 		facet.sparqlBase = parameters.sparqlBase;
-		
-		// swap if forwarding and swapping enabled
-		if (parameters.forwarding && parameters.swapForwardedTriples) {
-			var tmp = triplePA;
-			triplePA = tripleFPA;
-			tripleFPA = tmp;
-    	}
-    	
-	    // forwarded triple patterns
-    	if (tripleFPA.length > 0) {
-    		// only use service if there are some triple patterns
-	    	if (triplePA.length > 0) 
-				facet.sparql += 'SERVICE <' + parameters.sparqlForwardBase + '> { \n';
-			// we need to swap the SPARQL endpoint in this case!!
-			else			
-				facet.sparqlBase = parameters.sparqlForwardBase;
-			for (var i=0;i<tripleFPA.length;i++)
-				facet.sparql += tripleFPA[i]+' \n';
-        	// only use service if there are some triple patterns
-	    	if (triplePA.length > 0)
-				facet.sparql += '}';//for the SERVICE... 
-    	}
     	
 		// triple patterns
 		for (var i=0;i<triplePA.length;i++)
@@ -557,4 +681,3 @@ function previousInstance(uri) {
 	});
 	return iid;
 }
-

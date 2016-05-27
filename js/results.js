@@ -29,7 +29,7 @@ function showResults(data) {
 		$.mobile.loading('hide');
 		// existing results page
 		$.mobile.changePage("#" + qid, {
-			transition : 'slide'
+			transition : 'none'
 		});	
 		// update results id
 		Results.resultsId = qid;
@@ -80,7 +80,12 @@ function showResults(data) {
 				// increment query counter
 				Results.resultsCount++;
 				Results.resultsA.push(resultsObj);
-				prepareTable(resultsObj);				
+				
+				// merge rows if possible 
+				mergeRows(resultsObj);
+				
+				// show table
+				showTable(resultsObj);				
 			},
 			error: function(jqXHR, status, errorThrown) {
 				// log
@@ -98,7 +103,75 @@ function showResults(data) {
 	}		
 }
 
-function prepareTable(resultsObj) {
+function mergeRows(resultsObj) {
+	var newbindings = [];
+	_.each(resultsObj.results.results.bindings, function(rowA, i) {
+		// find the first element (if any) in newbindings that could be merged to rowA
+		var mergingrow = _.find(newbindings, function(rowB) {
+			// check if rowA and rowB should be merged
+			var mergeable = true;
+			_.each(resultsObj.facetsA, function(resvar) {
+				if (mergeable) { // only go on if rowA and rowB can still be merged
+					if (rowA[resvar.id] === undefined && rowB[resvar.id] !== undefined)
+						mergeable = false;
+					else if (rowA[resvar.id] !== undefined && rowB[resvar.id] === undefined)
+						mergeable = false;
+					else if (rowA[resvar.id].type !== rowB[resvar.id].type) 
+						mergeable = false;
+					else if (rowA[resvar.id].type === 'uri') { // check equality of the 2 individuals
+						if (rowA[resvar.id].value !== rowB[resvar.id].value)
+							mergeable = false;			
+					}
+					else { // 2 bnodes, check if literals are the same (boring...)
+						_.each(resvar.literalA, function(lvar) {
+							// CAUTION, THERE MIGHT BE OPTIONAL VALUES
+							if (rowA[lvar.id] === undefined && rowB[lvar.id] !== undefined)
+								mergeable = false;
+							else if (rowA[lvar.id] !== undefined && rowB[lvar.id] === undefined)
+								mergeable = false;
+							else {
+								// CAUTION, rowB CAN HAVE MERGED VALUES
+								var elsB = (rowB[lvar.id].value).split("<br>");
+								var existing = _.find(elsB, function(elB){ return rowA[lvar.id].value === elB; });
+								if (existing === undefined)
+									mergeable = false;									
+							}
+						});			
+					}
+				}				
+			});
+			return mergeable;
+		});
+		if (mergingrow === undefined)
+			newbindings.push(rowA); // not mergeable, just include rowA in newbindings
+		else {
+			// merge rowA into mergingrow
+			//console.log("Merging row #"+i);
+			_.each(resultsObj.facetsA, function(resvar) {
+				// merge the literal values
+				_.each(resvar.literalA, function(lvar) {
+					// CAUTION, THERE MIGHT BE OPTIONAL VALUES
+					if (rowA[lvar.id] !== undefined && mergingrow[lvar.id] === undefined) 
+						mergingrow[lvar.id] = rowA[lvar.id]; // substitution
+					else if (rowA[lvar.id] !== undefined && mergingrow[lvar.id] !== undefined) {
+						var vals = (mergingrow[lvar.id].value).split("<br>");
+						if (vals.length==1 && vals[0]==="")
+							mergingrow[lvar.id] = rowA[lvar.id]; // substitution
+						else {
+							var existing = _.find(vals, function(val){ return rowA[lvar.id].value === val; });
+							if (existing === undefined) // merge values
+								mergingrow[lvar.id].value += "<br>"+rowA[lvar.id].value;
+						}
+					}
+				});			
+			});
+		}
+	});
+	// set newbindings to the results object
+	resultsObj.results.results.bindings = newbindings;
+}
+
+function showTable(resultsObj) {
 	var content = '<div data-url="n" data-role="page" id="' + resultsObj.id + '" class="page">';	
 	content += '<div data-role="header" data-id="myheader" data-position="fixed">';
 	content += '<div class="ui-btn-left" data-role="controlgroup" data-type="horizontal" data-mini="true"> \
@@ -150,7 +223,7 @@ function prepareTable(resultsObj) {
 			if (ditem[resvar.id] === undefined)
 				content += '<td></td>';
 			// include hyperlink if type uri
-			else if (ditem[resvar.id].type == 'uri') {
+			else if (ditem[resvar.id].type === 'uri') {
 				// CAUTION: display property might not exist
 				if ((!resvar.display.propId) || (ditem[resvar.display.id] === undefined))
 					content += '<td><a class="instance" uri="'+ditem[resvar.id].value
@@ -179,7 +252,19 @@ function prepareTable(resultsObj) {
 				if (ditem[lvar.id] === undefined)
 					content += '<td></td>';
 				else {
-					content += '<td>'+ditem[lvar.id].value+'</td>';						
+					// check the length of the literal
+					if (ditem[lvar.id].value.length < parameters.maxResultFieldLength)				
+						content += '<td>'+ditem[lvar.id].value+'</td>';
+					else {
+						var lesstext = ditem[lvar.id].value.substring(0, parameters.maxResultFieldLength-2)+"...";					
+						content += '<td><span>'+lesstext+'</span>'
+							+ '<a href="#" class="moretext" data-role="button" data-icon="plus" \
+								texto="'+ditem[lvar.id].value+'" \
+								data-iconpos="notext" data-inline="true"></a>'
+							+ '<a href="#" class="lesstext ui-hidden-accessible" data-role="button" data-icon="minus" \
+								texto="'+lesstext+'" \
+								data-iconpos="notext" data-inline="true"></a></td>';
+					}
 				}
 			});			
 		});	
@@ -200,7 +285,7 @@ function prepareTable(resultsObj) {
 
 	//go to it
 	$.mobile.changePage("#" + resultsObj.id, {
-		transition : 'slide'
+		transition : 'none'
 	});
 	
 	// sorting and pagination only in case of results

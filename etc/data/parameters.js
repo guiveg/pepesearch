@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2013, Guillermo Vega-Gorgojo
+  Copyright (c) 2013-2016, Guillermo Vega-Gorgojo
   All rights reserved
  */
 
@@ -14,15 +14,14 @@ var parameters = new Object();
 //parameters.password = "";
 // SPARQL endpoint
 parameters.sparqlBase = "http://data.computas.com:3030/sparql";
-//parameters.sparqlForwardBase = "http://data.computas.com:3030/sparql";
-parameters.forwarding = false;
-parameters.instanceHack = true;
-// Workaround when the main endpoint doesn't support the SERVICE keyword:
-//parameters.swapForwardedTriples = true; 
 parameters.sparqlLIMIT = 200;
 parameters.sparqlLIMITinstance = 50;
 // if greater, send the query with POST
 parameters.maxSparqlLength = 6000;
+// control the maximum field length in the results table
+parameters.maxResultFieldLength = 120;
+// if true, properties are hidden and thus forms are simplified
+parameters.hidePropertiesMode = false;
 // required or optional behavior in query building
 parameters.optional = false;
 // strategy for inclusion of literals in the query:

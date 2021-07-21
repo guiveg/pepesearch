@@ -7,6 +7,9 @@ PepeSearch is a search interface for querying SPARQL endpoints developed at the 
 
 PepeSearch uses [the SPARQL endpoint analyzer](https://github.com/simenheg/sparql-endpoint-analyzer) for obtaining the data structure of a SPARQL endpoint. See the [configuration section](#configuration). 
 
+Please cite PepeSearch as:
+
+> G. Vega-Gorgojo, M. Giese, S. Heggestøyl, A. Soylu, A. Waaler. PepeSearch: Semantic Data for the Masses. PLoS ONE. 11(3), March 2016.
 
 Usage
 ==========
